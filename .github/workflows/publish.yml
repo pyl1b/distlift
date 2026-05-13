@@ -1,0 +1,67 @@
+name: Publish
+
+# Builds and uploads distlift to PyPI or TestPyPI via trusted publishing (OIDC).
+# Requires GitHub Environment "pypi" and matching publishers on PyPI / TestPyPI.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Registry to publish to (tags always use PyPI)
+        type: choice
+        required: true
+        default: pypi
+        options:
+          - pypi
+          - testpypi
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    environment: pypi
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Install tooling and verify the tree before publishing.
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build
+
+      - name: Install package with dev deps and run tests
+        run: |
+          pip install -e ".[dev]"
+          pytest
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      # Publish (trusted publisher must match repo, workflow file, environment).
+
+      - name: Publish to PyPI
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' &&
+           github.event.inputs.target == 'pypi')
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish to TestPyPI
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

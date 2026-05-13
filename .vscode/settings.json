@@ -1,0 +1,20 @@
+{
+    "cSpell.words": [
+        "conftest",
+        "corelib",
+        "dataclasses",
+        "distlift",
+        "pypa",
+        "pypi",
+        "pyproject",
+        "revspec",
+        "sdist",
+        "setuptools",
+        "stdlib",
+        "testpypi",
+        "tomllib",
+        "typer",
+        "Typer",
+        "worktree"
+    ]
+}
