@@ -77,6 +77,7 @@ STUB_CONFIG_CONTENT: str = """\
 # set via DISTLIFT_EDITOR instead of this file.
 # editor = "code --wait"
 
+
 # [changelog]
 # enabled = true
 # path = "CHANGELOG.md"
@@ -84,12 +85,44 @@ STUB_CONFIG_CONTENT: str = """\
 # prompt_editor = true
 # compare_url_template = ""           # auto-derived from origin when empty
 
+
 # [plugins]
 # enable_environment = true
 # enable_builtin = true
 # allow_override = true
 # paths = []
 # directories = []
+
+
+# Monorepo: ``path`` is repo-relative to the package root (where
+# ``pyproject.toml`` or ``package.json`` lives). Shorthand: list paths and the
+# package ``name`` is the last path component.
+#
+# When using monorepo mode, set ``mode = "monorepo"`` above (or under
+# ``[release]``). Default tag template is ``v{version}-{package}``.
+#
+# [monorepo]
+# enabled = true
+# packages = [
+#     "pack_two",
+#     "path/to/package_two",
+# ]
+#
+# For per-package settings, use a table with ``name`` and ``path`` plus any
+# optional fields (all shown below). Omit optional keys to inherit defaults.
+#
+# [[monorepo.packages]]
+# name = "custom_name"                # required when using a table row
+# path = "path/to/package_three"        # required
+#
+# language = "javascript"            # optional: python | javascript
+# manifest_path = "abs/or/rel/toml"  # optional: explicit version file path
+# version_format = "major-minor-patch"  # optional: major, major-minor, or
+#                                       # major-minor-patch (default)
+# default_version = "0.1.0"           # optional
+# tag_template = "v{version}-{package}"  # optional per-package tag pattern
+# version_source = "manifest"         # optional: manifest | tag
+# changelog_path = "pkg/CHANGELOG.md"  # optional: this package's changelog
 """
 
 

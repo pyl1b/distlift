@@ -9,10 +9,12 @@
 ### Added
 
 - Commands to create and edit the repo config file.
+- Simple packages list in monorepo config (path only, derive name).
 
 ### Changed
 
  - how to deal with GPG signing when the tests run on a local computer
+ - add patch, minor, major, version to main command as in `distlift release`
 
 ## [0.1.2] - 2026-05-13
 

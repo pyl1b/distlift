@@ -313,6 +313,79 @@ def load_environment_config(
     return result
 
 
+def _managed_package_from_monorepo_item(
+    item: Any, source: str
+) -> ManagedPackageConfig:
+    """Normalize one ``monorepo.packages`` entry into a managed package.
+
+    Args:
+        item: Either a repo-relative path string (name derived from the last
+            path segment) or a mapping with ``name`` and ``path`` keys.
+        source: Config layer label included in error messages.
+    """
+    # Shorthand: a string is the repo-relative package root; ``name`` is the
+    # final path segment.
+    if isinstance(item, str):
+        path = item.strip()
+
+        if not path:
+            raise ConfigurationError(
+                "Monorepo package path cannot be empty "
+                f"(check [monorepo].packages in {source})"
+            )
+
+        name = Path(path).name
+
+        if not name or name in {".", ".."}:
+            raise ConfigurationError(
+                f"Cannot derive monorepo package name from path {path!r} ({source})"
+            )
+
+        return ManagedPackageConfig(
+            name=name,
+            path=path,
+        )
+
+    # Explicit table row: ``name`` and ``path`` plus optional per-package keys.
+    if isinstance(item, Mapping):
+        name_raw = item.get("name")
+        path_raw = item.get("path")
+
+        if not isinstance(name_raw, str) or not name_raw.strip():
+            raise ConfigurationError(
+                f"Monorepo package entry requires a non-empty string 'name' ({source})"
+            )
+
+        if not isinstance(path_raw, str) or not path_raw.strip():
+            label = name_raw.strip()
+            raise ConfigurationError(
+                f"Monorepo package entry {label!r} requires a non-empty string 'path' "
+                f"({source})"
+            )
+
+        pkg = item
+        return ManagedPackageConfig(
+            name=name_raw.strip(),
+            path=path_raw.strip(),
+            language=Language(pkg["language"]) if "language" in pkg else None,
+            manifest_path=pkg.get("manifest_path"),
+            version_format=VersionFormat(
+                pkg.get("version_format", "major-minor-patch")
+            ),
+            default_version=pkg.get("default_version", "0.1.0"),
+            tag_template=pkg.get("tag_template"),
+            version_source=VersionSource(
+                pkg.get("version_source", "manifest")
+            ),
+            changelog_path=pkg.get("changelog_path"),
+        )
+
+    raise ConfigurationError(
+        f"Each monorepo.packages entry must be a path string or a table; "
+        f"got {type(item).__name__} ({source})"
+    )
+
+
 def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
     """Convert a loose config mapping into a structured ``RawConfig``.
 
@@ -371,25 +444,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
     packages = []
 
     for pkg in monorepo_data.get("packages", []):
-        packages.append(
-            ManagedPackageConfig(
-                name=pkg["name"],
-                path=pkg["path"],
-                language=Language(pkg["language"])
-                if "language" in pkg
-                else None,
-                manifest_path=pkg.get("manifest_path"),
-                version_format=VersionFormat(
-                    pkg.get("version_format", "major-minor-patch")
-                ),
-                default_version=pkg.get("default_version", "0.1.0"),
-                tag_template=pkg.get("tag_template"),
-                version_source=VersionSource(
-                    pkg.get("version_source", "manifest")
-                ),
-                changelog_path=pkg.get("changelog_path"),
-            )
-        )
+        packages.append(_managed_package_from_monorepo_item(pkg, source))
 
     monorepo_config = MonorepoConfig(
         enabled=monorepo_data.get("enabled", False),
