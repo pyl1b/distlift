@@ -4,7 +4,8 @@ from typer.testing import CliRunner
 
 from distlift.app import DistliftApplication
 from distlift.cli import app
-from distlift.publish.models import PublishResult, PublishRunResult
+from distlift.publish.models import PublishRunResult
+from distlift.release.models import ReleaseResult
 
 runner = CliRunner()
 
@@ -37,60 +38,131 @@ class TestCLI:
         )
         assert result.exit_code == 0
 
-    def test_no_subcommand_triggers_publish(
+    def test_no_subcommand_invokes_default_release(
         self, tmp_python_project: Path, monkeypatch
     ) -> None:
-        """Bare ``distlift`` invokes the default publish path."""
+        """Bare ``distlift`` invokes the patch release workflow."""
         captured: dict[str, object] = {}
 
-        def fake_run_publish(
+        def fake_run_default_command(
             self: DistliftApplication,
             repo_root: Path,
             config: object,
+            *,
             dry_run: bool,
+            build: bool,
+            publish: bool,
             registry: object | None = None,
-        ) -> PublishRunResult:
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["repo_root"] = repo_root
             captured["dry_run"] = dry_run
-            return PublishRunResult(
-                success=True,
-                projects=[
-                    ("mypackage", PublishResult(success=True, artifacts=[])),
-                ],
+            captured["build"] = build
+            captured["publish"] = publish
+            return (
+                ReleaseResult(
+                    success=True,
+                    dry_run=dry_run,
+                    tag_names=["v0.2.2"],
+                    commit_sha="abc",
+                    pushed_remotes=["origin"],
+                ),
+                None,
             )
 
         monkeypatch.setattr(
-            DistliftApplication, "run_publish", fake_run_publish
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
         )
         result = runner.invoke(app, ["--repo-root", str(tmp_python_project)])
         assert result.exit_code == 0
         assert captured.get("dry_run") is False
+        assert captured.get("build") is False
+        assert captured.get("publish") is False
         assert captured["repo_root"] == tmp_python_project.resolve()
-        assert "mypackage" in result.output
+        assert "v0.2.2" in result.output
 
-    def test_explicit_subcommand_skips_default_publish(
-        self, tmp_path: Path, monkeypatch
+    def test_no_subcommand_forwards_build_and_publish_flags(
+        self, tmp_python_project: Path, monkeypatch
     ) -> None:
-        published: list[int] = []
+        captured: dict[str, bool | None] = {}
 
-        def fake_run_publish(self: DistliftApplication, *args, **kwargs):
-            published.append(1)
-            return PublishRunResult(success=True)
+        def fake_run_default_command(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            dry_run: bool,
+            build: bool,
+            publish: bool,
+            registry: object | None = None,
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            captured["build"] = build
+            captured["publish"] = publish
+            return (
+                ReleaseResult(
+                    success=True,
+                    dry_run=dry_run,
+                    tag_names=["v1"],
+                ),
+                None,
+            )
 
         monkeypatch.setattr(
-            DistliftApplication, "run_publish", fake_run_publish
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
+        )
+        runner.invoke(
+            app,
+            [
+                "--repo-root",
+                str(tmp_python_project),
+                "--build",
+                "--publish",
+            ],
+        )
+        assert captured["build"] is True
+        assert captured["publish"] is True
+
+    def test_explicit_subcommand_skips_default_command(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        called: list[int] = []
+
+        def fake_run_default_command(
+            self: DistliftApplication, *args, **kwargs
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            called.append(1)
+            return ReleaseResult(success=True, dry_run=False), None
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
         )
         runner.invoke(app, ["config", "show", "--repo-root", str(tmp_path)])
-        assert published == []
+        assert called == []
 
-    def test_publish_mock_failure_exits_nonzero(
+    def test_default_release_failure_exits_nonzero(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        def fake_run_publish(self: DistliftApplication, *args, **kwargs):
-            return PublishRunResult(success=False, error="no project")
+        def fake_run_default_command(
+            self: DistliftApplication, *args, **kwargs
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            return (
+                ReleaseResult(
+                    success=False,
+                    dry_run=False,
+                    error="no tag",
+                ),
+                None,
+            )
 
         monkeypatch.setattr(
-            DistliftApplication, "run_publish", fake_run_publish
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
         )
         result = runner.invoke(app, ["--repo-root", str(tmp_path)])
         assert result.exit_code != 0

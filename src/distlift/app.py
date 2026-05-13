@@ -6,11 +6,17 @@ import attrs
 
 from distlift.config.loader import load_config_layers
 from distlift.config.merger import merge_config_layers
-from distlift.config.models import Language, ReleaseMode, ResolvedConfig
+from distlift.config.models import (
+    BumpKind,
+    Language,
+    ReleaseMode,
+    ResolvedConfig,
+)
 from distlift.monorepo.discovery import load_managed_packages
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
 from distlift.plugins.registry import PluginRegistry
 from distlift.publish.models import (
+    BuildArtifact,
     PublishRequest,
     PublishResult,
     PublishRunResult,
@@ -29,6 +35,56 @@ from distlift.release.simple import (
 )
 
 
+def _collect_artifacts_for_target(
+    target: ReleaseTarget,
+    package_manager: str = "npm",
+) -> list[BuildArtifact]:
+    """Build local distribution artifacts for the given release target.
+
+    Args:
+        target: Resolved project root and language.
+        package_manager: npm, pnpm, or yarn for JavaScript projects.
+
+    Returns:
+        Built artifacts returned by the language-specific builder.
+    """
+    from distlift.publish.javascript import build_javascript_distributions
+    from distlift.publish.python import build_python_distributions
+
+    root = target.root
+
+    if target.language == Language.PYTHON:
+        return build_python_distributions(root)
+
+    if target.language == Language.JAVASCRIPT:
+        return build_javascript_distributions(
+            root, package_manager=package_manager
+        )
+
+    from distlift.errors import UnsupportedLanguageError
+
+    raise UnsupportedLanguageError(
+        f"Cannot build: unsupported language {target.language.value}"
+    )
+
+
+def _build_target_only(
+    target: ReleaseTarget,
+    package_manager: str = "npm",
+) -> PublishResult:
+    """Build artifacts for ``target`` without uploading them.
+
+    Args:
+        target: Resolved project root and language.
+        package_manager: npm, pnpm, or yarn for JavaScript projects.
+
+    Returns:
+        A successful result carrying the produced artifacts.
+    """
+    artifacts = _collect_artifacts_for_target(target, package_manager)
+    return PublishResult(success=True, artifacts=list(artifacts))
+
+
 def _build_and_publish_target(
     target: ReleaseTarget,
     dry_run: bool,
@@ -44,27 +100,16 @@ def _build_and_publish_target(
     Returns:
         Result of the publish step for the built artifacts.
     """
-    from distlift.publish.javascript import (
-        build_javascript_distributions,
-        publish_javascript_distributions,
-    )
-    from distlift.publish.python import (
-        build_python_distributions,
-        publish_python_distributions,
-    )
+    from distlift.publish.javascript import publish_javascript_distributions
+    from distlift.publish.python import publish_python_distributions
 
-    root = target.root
+    artifacts = _collect_artifacts_for_target(target, package_manager)
+    request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
 
     if target.language == Language.PYTHON:
-        artifacts = build_python_distributions(root)
-        request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
         return publish_python_distributions(request)
 
     if target.language == Language.JAVASCRIPT:
-        artifacts = build_javascript_distributions(
-            root, package_manager=package_manager
-        )
-        request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
         return publish_javascript_distributions(
             request, package_manager=package_manager
         )
@@ -78,6 +123,134 @@ def _build_and_publish_target(
 
 @attrs.define
 class DistliftApplication:
+    def run_default_command(
+        self,
+        repo_root: Path,
+        config: ResolvedConfig,
+        *,
+        dry_run: bool,
+        build: bool,
+        publish: bool,
+        registry: PluginRegistry | None = None,
+    ) -> tuple[ReleaseResult, PublishRunResult | None]:
+        """Run patch release plus optional artifact build or publish.
+
+        Simple mode bumps the patch level. Monorepo mode uses the same selection
+        rules as ``distlift release monorepo`` without ``--all-changed`` or
+        ``--package`` (every managed package is included).
+
+        Args:
+            repo_root: Repository root.
+            config: Effective resolved configuration.
+            dry_run: When True, skips release Git writes and registry uploads.
+            build: When True, build distributions after a successful release.
+            publish: When True, build and upload after a successful release.
+            registry: Optional pre-built plugin registry.
+
+        Returns:
+            Release outcome, then build/publish aggregate when requested, else None.
+        """
+        if registry is None:
+            registry = self._default_registry(config)
+
+        root = repo_root.resolve()
+
+        if config.mode == ReleaseMode.MONOREPO:
+            monorepo_req = MonorepoReleaseRequest(
+                repo_root=root,
+                config=config,
+                default_bump=BumpKind.PATCH,
+                selected_packages=[],
+                all_changed=False,
+                dry_run=dry_run,
+            )
+            release_result = self.run_monorepo_release(
+                monorepo_req, registry=registry
+            )
+        else:
+            simple_req = SimpleReleaseRequest(
+                repo_root=root,
+                config=config,
+                bump=BumpKind.PATCH,
+                explicit_version=None,
+                dry_run=dry_run,
+            )
+            release_result = self.run_simple_release(
+                simple_req, registry=registry
+            )
+
+        if not release_result.success:
+            return release_result, None
+
+        optional: PublishRunResult | None = None
+
+        # Optional distribution build or publish after tagging
+        if build or publish:
+            optional = self._run_optional_build_publish(
+                root,
+                config,
+                dry_run,
+                build,
+                publish,
+                registry=registry,
+            )
+
+        return release_result, optional
+
+    def _run_optional_build_publish(
+        self,
+        repo_root: Path,
+        config: ResolvedConfig,
+        dry_run: bool,
+        build: bool,
+        publish: bool,
+        *,
+        registry: PluginRegistry,
+    ) -> PublishRunResult:
+        """Build and optionally publish artifacts for each relevant package root.
+
+        Args:
+            repo_root: Resolved repository root.
+            config: Effective resolved configuration.
+            dry_run: Passed through to publishers when ``publish`` is True.
+            build: When True and ``publish`` is False, build only per project.
+            publish: When True, build and invoke the registry publisher.
+            registry: Loaded plugin registry (must match release planning).
+
+        Returns:
+            One result row per targeted package or project root.
+        """
+        projects_out: list[tuple[str, PublishResult]] = []
+
+        if config.mode == ReleaseMode.MONOREPO:
+            # One cycle per declared monorepo package
+            for pkg in load_managed_packages(config):
+                pkg_root = (repo_root / pkg.path).resolve()
+                pkg_config = (
+                    attrs.evolve(config, language=pkg.language)
+                    if pkg.language is not None
+                    else config
+                )
+                target = prepare_simple_target(pkg_root, pkg_config, registry)
+                if publish:
+                    pr = _build_and_publish_target(target, dry_run)
+                else:
+                    pr = _build_target_only(target)
+                projects_out.append((pkg.name, pr))
+
+        else:
+            target = prepare_simple_target(repo_root, config, registry)
+            label = target.package_name or repo_root.name
+            if publish:
+                pr = _build_and_publish_target(target, dry_run)
+            else:
+                pr = _build_target_only(target)
+            projects_out.append((label, pr))
+
+        success = all(pr.success for _, pr in projects_out)
+
+        return PublishRunResult(success=success, projects=projects_out)
+
     def run_simple_release(
         self,
         request: SimpleReleaseRequest,

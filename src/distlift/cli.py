@@ -19,7 +19,8 @@ app = typer.Typer(
     name="distlift",
     help=(
         "Release orchestrator for Python and JavaScript packages. "
-        "With no subcommand, builds and publishes the current project."
+        "With no subcommand, bumps patch, updates manifests, commits, tags, "
+        "and pushes. Use --build or --publish to add distribution steps."
     ),
 )
 release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
@@ -43,7 +44,25 @@ def distlift_main_callback(
         typer.Option(
             "--dry-run",
             help=(
-                "Skip registry upload (per-language); may still build artifacts."
+                "Plan-only release (no Git writes); if combined with "
+                "--publish, skip registry upload but may still build."
+            ),
+        ),
+    ] = False,
+    build: Annotated[
+        bool,
+        typer.Option(
+            "--build",
+            help="After a successful release, build distributions locally.",
+        ),
+    ] = False,
+    publish: Annotated[
+        bool,
+        typer.Option(
+            "--publish",
+            help=(
+                "After a successful release, build and upload to the "
+                "configured registry."
             ),
         ),
     ] = False,
@@ -53,7 +72,7 @@ def distlift_main_callback(
         typer.Option("--repo-root", help="Repository root"),
     ] = Path("."),
 ) -> None:
-    """Distlift CLI entry; no subcommand runs build and publish."""
+    """Distlift CLI entry; no subcommand runs a patch release and optional distro steps."""
     if ctx.invoked_subcommand is not None:
         return
 
@@ -69,33 +88,59 @@ def distlift_main_callback(
         typer.echo(f"Configuration error: {exc}", err=True)
         raise typer.Exit(1)
 
-    result = application.run_publish(root, config, dry_run=dry_run)
+    release_result, build_publish = application.run_default_command(
+        root,
+        config,
+        dry_run=dry_run,
+        build=build,
+        publish=publish,
+    )
 
-    if result.error:
-        typer.echo(f"Publish failed: {result.error}", err=True)
+    if not release_result.success:
+        err_txt = release_result.error or "unknown"
+        typer.echo(f"Release failed: {err_txt}", err=True)
         raise typer.Exit(1)
 
     prefix = "[dry-run] " if dry_run else ""
 
-    # One line per project (simple repo or each monorepo package)
-    for label, pr in result.projects:
-        if pr.success:
-            names = ", ".join(a.path.name for a in pr.artifacts)
-            if names:
-                typer.echo(f"{prefix}{label}: published {names}")
-            else:
-                typer.echo(f"{prefix}{label}: ok")
-        else:
+    tag_line = ", ".join(release_result.tag_names) or "(no tags)"
+    typer.echo(f"{prefix}Released: {tag_line}")
+    if release_result.commit_sha and not dry_run:
+        typer.echo(f"Commit: {release_result.commit_sha}")
+    if release_result.pushed_remotes:
+        remotes_txt = ", ".join(release_result.pushed_remotes)
+        typer.echo(f"Pushed to: {remotes_txt}")
+
+    if build_publish is not None:
+        if build_publish.error:
             typer.echo(
-                "{}: {}".format(
-                    label,
-                    pr.error or "publish failed",
-                ),
+                f"Build/publish failed: {build_publish.error}",
                 err=True,
             )
+            raise typer.Exit(1)
 
-    if not result.success:
-        raise typer.Exit(1)
+        # One line per project (simple repo or each monorepo package)
+        for label, pr in build_publish.projects:
+            if not pr.success:
+                msg = pr.error or "build or publish failed"
+                typer.echo(f"{label}: {msg}", err=True)
+                continue
+
+            artifact_names = ", ".join(a.path.name for a in pr.artifacts)
+
+            # Describe build-only vs publish after release
+            if publish:
+                if artifact_names:
+                    typer.echo(f"{prefix}{label}: published {artifact_names}")
+                else:
+                    typer.echo(f"{prefix}{label}: publish ok")
+            elif artifact_names:
+                typer.echo(f"{prefix}{label}: built {artifact_names}")
+            else:
+                typer.echo(f"{prefix}{label}: build ok")
+
+        if not build_publish.success:
+            raise typer.Exit(1)
 
 
 def _resolve_app_config(
