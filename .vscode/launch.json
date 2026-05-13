@@ -1,0 +1,244 @@
+{
+  "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "distlift.pythonExe",
+      "type": "pickString",
+      "description": "Interpreter (venv/bin/python is Linux/macOS only — do not use on Windows)",
+      "options": [
+        {
+          "label": "Python extension / status bar interpreter (recommended)",
+          "value": "${command:python.interpreterPath}"
+        },
+        {
+          "label": "Project venv: venv\\Scripts\\python.exe (Windows)",
+          "value": "${workspaceFolder}/venv/Scripts/python.exe"
+        },
+        {
+          "label": "Project venv: venv/bin/python (Linux or macOS only)",
+          "value": "${workspaceFolder}/venv/bin/python"
+        }
+      ],
+      "default": "${command:python.interpreterPath}"
+    },
+    {
+      "id": "distlift.repoRoot",
+      "type": "pickString",
+      "description": "--repo-root (pickString so ${workspaceFolder} is expanded; “.” uses cwd below)",
+      "options": [
+        {
+          "label": "Current folder (.) — cwd is workspace",
+          "value": "."
+        },
+        {
+          "label": "Workspace folder (absolute)",
+          "value": "${workspaceFolder}"
+        }
+      ],
+      "default": "."
+    },
+    {
+      "id": "distlift.releaseSimple.bump",
+      "type": "pickString",
+      "description": "release simple bump flag",
+      "options": ["--major", "--minor", "--patch"],
+      "default": "--patch"
+    },
+    {
+      "id": "distlift.releaseSimple.version",
+      "type": "promptString",
+      "description": "Explicit semver for release simple --version",
+      "default": "1.0.0"
+    },
+    {
+      "id": "distlift.releaseMonorepo.defaultBump",
+      "type": "pickString",
+      "description": "release monorepo --default-bump",
+      "options": ["patch", "minor", "major"],
+      "default": "patch"
+    }
+  ],
+  "configurations": [
+    {
+      "name": "distlift: publish",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": ["--repo-root", "${input:distlift.repoRoot}"]
+    },
+    {
+      "name": "distlift: publish (--dry-run)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["--dry-run", "--repo-root", "${input:distlift.repoRoot}"]
+    },
+    {
+      "name": "distlift: release simple (bump)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "simple",
+        "${input:distlift.releaseSimple.bump}",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: release simple (bump, --dry-run)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "simple",
+        "${input:distlift.releaseSimple.bump}",
+        "--dry-run",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: release simple (--version)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "simple",
+        "--version",
+        "${input:distlift.releaseSimple.version}",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: release simple (--version, --dry-run)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "simple",
+        "--version",
+        "${input:distlift.releaseSimple.version}",
+        "--dry-run",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: release monorepo (--all-changed)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "monorepo",
+        "--all-changed",
+        "--default-bump",
+        "${input:distlift.releaseMonorepo.defaultBump}",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: release monorepo (--all-changed, --dry-run)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "release",
+        "monorepo",
+        "--all-changed",
+        "--dry-run",
+        "--default-bump",
+        "${input:distlift.releaseMonorepo.defaultBump}",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: config show",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "show", "--repo-root", "${input:distlift.repoRoot}"]
+    },
+    {
+      "name": "distlift: config validate",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": [
+        "config",
+        "validate",
+        "--repo-root",
+        "${input:distlift.repoRoot}"
+      ]
+    },
+    {
+      "name": "distlift: plugins list",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["plugins", "list", "--repo-root", "${input:distlift.repoRoot}"]
+    },
+    {
+      "name": "distlift: plugins list (-V)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["plugins", "list", "-V", "--repo-root", "${input:distlift.repoRoot}"]
+    }
+  ]
+}

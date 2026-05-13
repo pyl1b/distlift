@@ -1,0 +1,287 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "distlift.pythonExe",
+      "type": "pickString",
+      "description": "Interpreter (venv/bin/python is Linux/macOS only)",
+      "options": [
+        {
+          "label": "Python extension / status bar interpreter (recommended)",
+          "value": "${command:python.interpreterPath}"
+        },
+        {
+          "label": "Project venv: venv\\Scripts\\python.exe (Windows)",
+          "value": "${workspaceFolder}/venv/Scripts/python.exe"
+        },
+        {
+          "label": "Project venv: venv/bin/python (Linux or macOS only)",
+          "value": "${workspaceFolder}/venv/bin/python"
+        }
+      ],
+      "default": "${command:python.interpreterPath}"
+    },
+    {
+      "id": "distlift.publish.extraArgs",
+      "type": "promptString",
+      "description": "Extra args for default publish (e.g. --dry-run or --config path)",
+      "default": ""
+    },
+    {
+      "id": "distlift.releaseSimple.bump",
+      "type": "pickString",
+      "description": "Version bump for release simple",
+      "options": ["--major", "--minor", "--patch"],
+      "default": "--patch"
+    },
+    {
+      "id": "distlift.releaseSimple.version",
+      "type": "promptString",
+      "description": "Explicit version for release simple (--version)",
+      "default": "1.0.0"
+    },
+    {
+      "id": "distlift.releaseSimple.extraArgs",
+      "type": "promptString",
+      "description": "Extra args after bump/version (e.g. --dry-run --remote origin)",
+      "default": ""
+    },
+    {
+      "id": "distlift.releaseMonorepo.extraArgs",
+      "type": "promptString",
+      "description": "release monorepo args (e.g. --all-changed --package lib-a --dry-run)",
+      "default": "--all-changed"
+    },
+    {
+      "id": "distlift.config.extraArgs",
+      "type": "promptString",
+      "description": "Extra args for config show / validate",
+      "default": ""
+    },
+    {
+      "id": "distlift.plugins.extraArgs",
+      "type": "promptString",
+      "description": "Extra args for plugins list",
+      "default": ""
+    }
+  ],
+  "tasks": [
+    {
+      "label": "distlift: CLI — publish (default)",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift ${input:distlift.publish.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift ${input:distlift.publish.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift ${input:distlift.publish.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — release simple (bump)",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple ${input:distlift.releaseSimple.bump} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple ${input:distlift.releaseSimple.bump} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple ${input:distlift.releaseSimple.bump} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — release simple (--version)",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple --version ${input:distlift.releaseSimple.version} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple --version ${input:distlift.releaseSimple.version} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release simple --version ${input:distlift.releaseSimple.version} ${input:distlift.releaseSimple.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — release monorepo",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release monorepo ${input:distlift.releaseMonorepo.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release monorepo ${input:distlift.releaseMonorepo.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift release monorepo ${input:distlift.releaseMonorepo.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config show",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config show ${input:distlift.config.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config show ${input:distlift.config.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config show ${input:distlift.config.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config validate",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config validate ${input:distlift.config.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config validate ${input:distlift.config.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config validate ${input:distlift.config.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — plugins list",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift plugins list ${input:distlift.plugins.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift plugins list ${input:distlift.plugins.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift plugins list ${input:distlift.plugins.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}
