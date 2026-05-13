@@ -4,24 +4,25 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.3] - 2026-05-13
 
 ### Added
 
 - Commands to create and edit the repo config file.
 - Simple packages list in monorepo config (path only, derive name).
-- Bare ``distlift`` supports ``--major``, ``--minor``, ``--patch``, and
-  ``--version`` / ``-v`` (use at most one; when none are given, behavior is
-  unchanged and the release is a patch bump).
-- ``distlift release monorepo`` supports the same bump and explicit version
-  flags. ``--default-bump`` is used only when none of those flags are set.
-  ``--version`` applies one next version to every package in that release; on
-  an interactive terminal distlift asks for confirmation first.
+- Bare ``distlift`` supports ``--major``, ``--minor``, ``--patch``, and ``--version`` / ``-v`` (use at most one; when none are given, behavior is unchanged and the release is a patch bump).
+- ``distlift release monorepo`` supports the same bump and explicit version flags. ``--default-bump`` is used only when none of those flags are set. ``--version`` applies one next version to every package in that release; on an interactive terminal distlift asks for confirmation first.
 
 ### Changed
 
 - How to deal with GPG signing when the tests run on a local computer.
 - By default we now publish only packages with changes in a monorepo.
+- Commands to create and edit the repo config file.
+- Simple packages list in monorepo config (path only, derive name).
 
 ## [0.1.2] - 2026-05-13
 
@@ -47,4 +48,5 @@
 
 [0.1.1]: https://github.com/pyl1b/distlift/compare/4cb9ee5108b97668875fd2cac9a297a1190f572c...v0.1.1
 [0.1.2]: https://github.com/pyl1b/distlift/compare/v0.1.1...v0.1.2
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.2...HEAD
+[0.1.3]: https://github.com/pyl1b/distlift/compare/v0.1.2...v0.1.3
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.3...HEAD
