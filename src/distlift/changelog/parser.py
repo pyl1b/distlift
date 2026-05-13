@@ -50,6 +50,22 @@ def _extract_footer(
     return lines[: idx + 1], footer
 
 
+def _markdown_unordered_item_body(stripped: str) -> str | None:
+    """Return list item text if ``stripped`` is a top-level MD bullet line.
+
+    Args:
+        stripped: A single logical line with outer whitespace removed.
+
+    Returns:
+        The bullet body after the marker, or None if not a supported marker.
+    """
+    for marker in ("- ", "* ", "+ "):
+        if stripped.startswith(marker):
+            return stripped[len(marker) :].strip()
+
+    return None
+
+
 def _parse_release_block(block_lines: list[str]) -> ChangelogReleaseEntry:
     """Parse one ``##`` release subsection into a structured entry.
 
@@ -101,14 +117,17 @@ def _parse_release_block(block_lines: list[str]) -> ChangelogReleaseEntry:
 
         stripped = line.strip()
 
-        if stripped.startswith("- "):
+        # Accept ``- ``, ``* ``, and ``+ `` list markers (common Markdown).
+        item_body = _markdown_unordered_item_body(stripped)
+
+        if item_body is not None:
             if current_title is None:
                 raise ChangelogError(
                     "Bullet found before any ### section under "
                     f"[{version_label}]"
                 )
 
-            current_bullets.append(stripped[2:].strip())
+            current_bullets.append(item_body)
 
             continue
 

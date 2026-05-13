@@ -37,6 +37,17 @@ class TestParseReleaseEntryMarkdown:
         assert entry.version_label == "0.1.2"
         assert entry.date_iso == "2026-05-13"
 
+    def test_accepts_star_and_plus_list_markers(self) -> None:
+        """Treat ``*`` and ``+`` bullets like hyphen lists (Markdown)."""
+        text = (
+            "## [1.0.0]\n\n### Added\n\n* first\n+ second\n"
+            "### Fixed\n\n- third\n"
+        )
+        entry = parse_release_entry_markdown(text)
+
+        assert entry.sections[0].bullets == ["first", "second"]
+        assert entry.sections[1].bullets == ["third"]
+
     def test_rejects_multiple_release_headings(self) -> None:
         """Fragments must contain exactly one ``##`` release section."""
         text = "## [1.0.0]\n\n### Added\n\n- a\n\n## [2.0.0]\n"
