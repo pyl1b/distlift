@@ -8,6 +8,7 @@ import attrs
 
 from distlift.config.models import (
     ChangelogConfig,
+    HooksConfig,
     ManagedPackageConfig,
     MonorepoConfig,
     PluginConfig,
@@ -92,6 +93,51 @@ def merge_changelog_overlays(layers: Sequence[RawConfig]) -> ChangelogConfig:
         merged.update(layer.changelog_overlay)
 
     return changelog_from_merged_overlay(merged)
+
+
+_HOOK_MERGE_FIELDS = (
+    "tag_pushed",
+    "tag_push_failed",
+    "release_failed",
+    "build_succeeded",
+    "build_failed",
+    "publish_succeeded",
+    "publish_failed",
+)
+
+
+def merge_hooks_layers(layers: Sequence[RawConfig]) -> HooksConfig:
+    """Merge hook specs: last non-empty TOML layer per event, then append env.
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
+    """
+    base = HooksConfig()
+
+    # Last non-empty ``hooks`` field per event replaces the list (file layers)
+    for layer in layers:
+        h = layer.hooks
+
+        for fn in _HOOK_MERGE_FIELDS:
+            lst = getattr(h, fn)
+
+            if lst:
+                base = attrs.evolve(base, **{fn: list(lst)})
+
+    # Append specs from ``hooks_append`` on each layer in order
+    for layer in layers:
+        ha = layer.hooks_append
+
+        for fn in _HOOK_MERGE_FIELDS:
+            extra = getattr(ha, fn)
+
+            if not extra:
+                continue
+
+            cur = list(getattr(base, fn)) + list(extra)
+            base = attrs.evolve(base, **{fn: cur})
+
+    return base
 
 
 def merge_optional_scalar(
@@ -267,6 +313,8 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
 
     changelog_config = merge_changelog_overlays(layers)
 
+    hooks_config = merge_hooks_layers(layers)
+
     return ResolvedConfig(
         language=language,
         mode=mode or ReleaseMode.SIMPLE,
@@ -279,5 +327,6 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog=changelog_config,
+        hooks=hooks_config,
         field_sources=field_sources,
     )

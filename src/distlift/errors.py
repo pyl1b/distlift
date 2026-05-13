@@ -79,3 +79,11 @@ class ChangelogError(DistliftError):
     Attributes:
         None beyond the attributes inherited from ``Exception``.
     """
+
+
+class HookExecutionError(DistliftError):
+    """A configured lifecycle hook subprocess exited with a non-zero status.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """

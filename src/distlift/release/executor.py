@@ -4,7 +4,9 @@ import attrs
 
 from distlift.changelog.builder import render_inserted_entry_preview
 from distlift.changelog.writer import write_changelog_document
-from distlift.config.models import Language
+from distlift.config.models import Language, ResolvedConfig
+from distlift.errors import HookExecutionError
+from distlift.hooks import build_hook_env, run_hook_specs, specs_for_event
 from distlift.languages.base import ProjectAdapter
 from distlift.logging_utils import get_logger
 from distlift.plugins.registry import PluginRegistry
@@ -55,43 +57,186 @@ class ReleaseExecutor:
 
     registry: PluginRegistry
 
-    def execute(self, plan: ReleasePlan) -> ReleaseResult:
+    def execute(
+        self, plan: ReleasePlan, config: ResolvedConfig
+    ) -> ReleaseResult:
         """Run the plan or return a dry-run summary without side effects.
 
         Args:
             plan: Fully built release plan for this repository.
+            config: Effective configuration including hook command lists.
         """
         if plan.dry_run:
             return self._dry_run_result(plan)
 
         git = GitRepository(root=plan.repo_root)
+        push_failed = False
+        commit_sha: str | None = None
+        pushed_remotes: list[str] = []
 
-        # Apply manifest writes, commit, tag, and push; any failure aborts
         try:
             self._apply_changelog_updates(plan)
             self._apply_manifest_updates(plan)
             commit_sha = self._commit_release(plan, git)
             self._create_tags(plan, git)
-            pushed = self._push_release(plan, git)
+
+            try:
+                self._push_release(plan, git, pushed_remotes)
+            except Exception as push_exc:
+                push_failed = True
+
+                # Run tag-push failure hooks with best-effort partial remotes
+                try:
+                    self._invoke_hook_event(
+                        config,
+                        "tag_push_failed",
+                        plan,
+                        commit_sha=commit_sha,
+                        pushed_remotes=pushed_remotes,
+                        error=str(push_exc),
+                        dry_run=False,
+                    )
+                except HookExecutionError as hook_exc:
+                    log.error(
+                        "tag_push_failed hook failed: %s",
+                        hook_exc,
+                        exc_info=True,
+                    )
+
+                    return ReleaseResult(
+                        success=False,
+                        dry_run=False,
+                        tag_names=plan.tag_names,
+                        commit_sha=commit_sha,
+                        pushed_remotes=pushed_remotes,
+                        error=str(hook_exc),
+                    )
+
+                raise push_exc from push_exc
+
+            if pushed_remotes:
+                self._invoke_hook_event(
+                    config,
+                    "tag_pushed",
+                    plan,
+                    commit_sha=commit_sha,
+                    pushed_remotes=pushed_remotes,
+                    error=None,
+                    dry_run=False,
+                )
+
             return ReleaseResult(
                 success=True,
                 dry_run=False,
                 tag_names=plan.tag_names,
                 commit_sha=commit_sha,
-                pushed_remotes=pushed,
+                pushed_remotes=pushed_remotes,
             )
+
+        except HookExecutionError as exc:
+            log.error("Hook execution failed: %s", exc, exc_info=True)
+
+            return ReleaseResult(
+                success=False,
+                dry_run=False,
+                tag_names=plan.tag_names,
+                commit_sha=commit_sha,
+                pushed_remotes=pushed_remotes,
+                error=str(exc),
+            )
+
         except Exception as exc:
+            if not push_failed:
+                try:
+                    self._invoke_hook_event(
+                        config,
+                        "release_failed",
+                        plan,
+                        commit_sha=commit_sha,
+                        pushed_remotes=pushed_remotes or None,
+                        error=str(exc),
+                        dry_run=False,
+                    )
+                except HookExecutionError as hook_exc:
+                    log.error(
+                        "release_failed hook failed: %s",
+                        hook_exc,
+                        exc_info=True,
+                    )
+
+                    log.error(
+                        "Release execution failed: %s",
+                        exc,
+                        exc_info=True,
+                    )
+
+                    return ReleaseResult(
+                        success=False,
+                        dry_run=False,
+                        tag_names=plan.tag_names,
+                        commit_sha=commit_sha,
+                        pushed_remotes=pushed_remotes,
+                        error=str(hook_exc),
+                    )
+
             log.error(
                 "Release execution failed: %s",
                 exc,
                 exc_info=True,
             )
+
             return ReleaseResult(
                 success=False,
                 dry_run=False,
-                tag_names=[],
+                tag_names=plan.tag_names,
                 error=str(exc),
             )
+
+    def _invoke_hook_event(
+        self,
+        config: ResolvedConfig,
+        event_name: str,
+        plan: ReleasePlan,
+        *,
+        commit_sha: str | None,
+        pushed_remotes: list[str] | None,
+        error: str | None,
+        dry_run: bool,
+    ) -> None:
+        """Run all hooks for one event when the list is non-empty.
+
+        Args:
+            config: Resolved configuration with merged hook specs.
+            event_name: Attribute name on ``HooksConfig``.
+            plan: Active release plan (supplies repo root and tag names).
+            commit_sha: Current commit hash when known.
+            pushed_remotes: Remotes successfully pushed, or partial list on
+                push failure.
+            error: Human-readable error string for failure events.
+            dry_run: When True, skip (callers use False after dry-run return).
+        """
+        if dry_run:
+            return
+
+        specs = specs_for_event(config.hooks, event_name)
+
+        if not specs:
+            return
+
+        extra = build_hook_env(
+            event=event_name,
+            repo_root=plan.repo_root,
+            dry_run=dry_run,
+            tag_names=plan.tag_names,
+            pushed_remotes=pushed_remotes,
+            commit_sha=commit_sha,
+            error=error,
+        )
+        run_hook_specs(
+            specs,
+            repo_root=plan.repo_root,
+            extra_env=extra,
+        )
 
     def _apply_changelog_updates(self, plan: ReleasePlan) -> None:
         """Write changelog documents described by the plan.
@@ -163,23 +308,27 @@ class ReleaseExecutor:
             git.create_tag(tag_name, message=message)
 
     def _push_release(
-        self, plan: ReleasePlan, git: GitRepository
-    ) -> list[str]:
+        self,
+        plan: ReleasePlan,
+        git: GitRepository,
+        pushed_out: list[str],
+    ) -> None:
         """Push the current branch and release tags to each configured remote.
 
         Args:
             plan: Active release plan.
             git: Repository handle for the same repo_root as the plan.
+            pushed_out: List mutated in place with each remote that fully
+                finishes branch and tag pushes (for partial progress on errors).
         """
         branch = git.get_current_branch()
-        pushed = []
+
         for remote in plan.remotes:
             log.info("Pushing branch %s to %s", branch, remote)
             git.push_branch(remote, branch)
             log.info("Pushing tags to %s", remote)
             git.push_tags(remote, plan.tag_names)
-            pushed.append(remote)
-        return pushed
+            pushed_out.append(remote)
 
     def _dry_run_result(self, plan: ReleasePlan) -> ReleaseResult:
         """Build a successful result describing actions that would run.

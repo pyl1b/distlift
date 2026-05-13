@@ -173,6 +173,57 @@ class MonorepoConfig:
 
 
 @attrs.define
+class HookSpec:
+    """One command to run as a lifecycle hook.
+
+    Exactly one of ``shell`` or ``argv`` must be set.
+
+    Attributes:
+        shell: Full string passed to the shell when ``shell=True``.
+        argv: Program name and arguments when ``shell=False``.
+    """
+
+    shell: str | None = None
+    argv: list[str] | None = None
+
+
+@attrs.define
+class HooksConfig:
+    """Lifecycle hook commands merged from configuration layers.
+
+    Each field is a list of :class:`HookSpec` entries for that event
+    (TOML and env-append merged by the config merger).
+
+    Attributes:
+        tag_pushed: After all tag pushes succeed for a release.
+        tag_push_failed: After a Git push step raises (partial remotes may
+            be recorded in hook environment).
+        release_failed: Planning failure or executor failure except push-only.
+        build_succeeded: After a successful local build for one package.
+        build_failed: After a failed local build for one package.
+        publish_succeeded: After a successful registry upload for one package.
+        publish_failed: After a failed registry upload for one package.
+    """
+
+    tag_pushed: list[HookSpec] = attrs.Factory(list)
+    tag_push_failed: list[HookSpec] = attrs.Factory(list)
+    release_failed: list[HookSpec] = attrs.Factory(list)
+    build_succeeded: list[HookSpec] = attrs.Factory(list)
+    build_failed: list[HookSpec] = attrs.Factory(list)
+    publish_succeeded: list[HookSpec] = attrs.Factory(list)
+    publish_failed: list[HookSpec] = attrs.Factory(list)
+
+
+def _empty_hooks_config() -> HooksConfig:
+    """Return a ``HooksConfig`` with no hooks registered.
+
+    Args:
+        None
+    """
+    return HooksConfig()
+
+
+@attrs.define
 class PluginConfig:
     """Plugin discovery and override behavior for this configuration.
 
@@ -208,6 +259,9 @@ class RawConfig:
         monorepo: Monorepo section contributed by this layer.
         changelog_overlay: Optional shallow overlay dict for ``changelog`` keys
             from this layer; merged field-by-field across layers.
+        hooks: Hook commands from this layer's ``[hooks]`` table.
+        hooks_append: Extra hook specs parsed from ``DISTLIFT_HOOKS_*``; only
+            the environment layer supplies these; appended after TOML merge.
         source: Human-readable label for the origin of this fragment.
     """
 
@@ -222,6 +276,8 @@ class RawConfig:
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog_overlay: dict[str, Any] = attrs.Factory(dict)
+    hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
+    hooks_append: HooksConfig = attrs.Factory(_empty_hooks_config)
     source: str = "<unknown>"
 
 
@@ -242,6 +298,7 @@ class ResolvedConfig:
         plugins: Effective plugin discovery and override settings.
         monorepo: Effective monorepo enable flag and merged package list.
         changelog: Effective Keep a Changelog generation settings.
+        hooks: Effective lifecycle hook command lists.
         field_sources: Map of top-level scalar field names to the source
             label of the layer that last set each field.
     """
@@ -257,4 +314,5 @@ class ResolvedConfig:
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog: ChangelogConfig = attrs.Factory(ChangelogConfig)
+    hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     field_sources: dict[str, str] = attrs.Factory(dict)

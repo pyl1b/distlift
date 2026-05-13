@@ -4,6 +4,18 @@ from pathlib import Path
 
 ENV_PREFIX = "DISTLIFT_"
 
+# ``DISTLIFT_HOOKS_<SUFFIX>`` appends hook specs after merged TOML (see loader).
+# Suffix is SCREAMING_SNAKE of the event key (``tag_pushed`` -> ``TAG_PUSHED``).
+HOOK_ENV_KEY_SUFFIXES: dict[str, str] = {
+    "tag_pushed": "TAG_PUSHED",
+    "tag_push_failed": "TAG_PUSH_FAILED",
+    "release_failed": "RELEASE_FAILED",
+    "build_succeeded": "BUILD_SUCCEEDED",
+    "build_failed": "BUILD_FAILED",
+    "publish_succeeded": "PUBLISH_SUCCEEDED",
+    "publish_failed": "PUBLISH_FAILED",
+}
+
 DEFAULT_REMOTE = "origin"
 DEFAULT_VERSION = "0.1.0"
 DEFAULT_TAG_TEMPLATE = "v{version}"

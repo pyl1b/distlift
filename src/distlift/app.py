@@ -14,6 +14,8 @@ from distlift.config.models import (
     ReleaseMode,
     ResolvedConfig,
 )
+from distlift.errors import HookExecutionError
+from distlift.hooks import run_config_hooks
 from distlift.monorepo.discovery import load_managed_packages
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
 from distlift.plugins.registry import PluginRegistry
@@ -73,43 +75,27 @@ def _collect_artifacts_for_target(
     )
 
 
-def _build_target_only(
+def _publish_built_artifacts(
     target: ReleaseTarget,
-    package_manager: str = "npm",
-) -> PublishResult:
-    """Build artifacts for ``target`` without uploading them.
-
-    Args:
-        target: Resolved project root and language.
-        package_manager: Package manager string for JavaScript projects.
-
-    Returns:
-        A successful result carrying the produced artifacts.
-    """
-    artifacts = _collect_artifacts_for_target(target, package_manager)
-    return PublishResult(success=True, artifacts=list(artifacts))
-
-
-def _build_and_publish_target(
-    target: ReleaseTarget,
+    artifacts: list[BuildArtifact],
     dry_run: bool,
     package_manager: str = "npm",
 ) -> PublishResult:
-    """Build artifacts for ``target`` and run the language publisher.
+    """Upload already-built artifacts for ``target``.
 
     Args:
         target: Resolved project root and language.
+        artifacts: Built files to pass to the publisher CLI.
         dry_run: When ``True``, uploads are skipped by the publisher
             implementations.
         package_manager: Package manager string for JavaScript projects.
 
     Returns:
-        Result of the publish step for the built artifacts.
+        Result of the publish step for this batch of artifacts.
     """
     from distlift.publish.javascript import publish_javascript_distributions
     from distlift.publish.python import publish_python_distributions
 
-    artifacts = _collect_artifacts_for_target(target, package_manager)
     request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
 
     # Route the publish request to the Python publisher implementation
@@ -221,9 +207,103 @@ class DistliftApplication:
                 build,
                 publish,
                 registry=registry,
+                release_tag_names=release_result.tag_names,
+                release_commit_sha=release_result.commit_sha,
             )
 
         return release_result, optional
+
+    def _build_publish_package_with_hooks(
+        self,
+        config: ResolvedConfig,
+        repo_root: Path,
+        target: ReleaseTarget,
+        label: str,
+        dry_run: bool,
+        publish: bool,
+        *,
+        release_tag_names: list[str] | None,
+        release_commit_sha: str | None,
+    ) -> PublishResult:
+        """Build and optionally publish one project, invoking lifecycle hooks.
+
+        Args:
+            config: Effective merged configuration including hooks.
+            repo_root: Repository root used as the hook working directory.
+            target: Project root and language metadata.
+            label: Package or project display name for hook environment.
+            dry_run: When True, hooks and registry uploads follow dry-run rules.
+            publish: When True, upload artifacts after a successful build.
+            release_tag_names: Tag names from the prior release step, if any.
+            release_commit_sha: Release commit hash when the release created one.
+        """
+        package_manager = "npm"
+
+        # Collect build artifacts or record build failure for hooks
+        try:
+            artifacts = _collect_artifacts_for_target(target, package_manager)
+        except Exception as exc:
+            if not dry_run:
+                try:
+                    run_config_hooks(
+                        config,
+                        "build_failed",
+                        repo_root,
+                        dry_run=dry_run,
+                        package=label,
+                        error=str(exc),
+                        tag_names=release_tag_names,
+                        commit_sha=release_commit_sha,
+                    )
+                except HookExecutionError as hook_exc:
+                    return PublishResult(success=False, error=str(hook_exc))
+
+            return PublishResult(success=False, error=str(exc))
+
+        if not dry_run:
+            try:
+                run_config_hooks(
+                    config,
+                    "build_succeeded",
+                    repo_root,
+                    dry_run=dry_run,
+                    package=label,
+                    tag_names=release_tag_names,
+                    commit_sha=release_commit_sha,
+                )
+            except HookExecutionError as hook_exc:
+                return PublishResult(success=False, error=str(hook_exc))
+
+        if not publish:
+            return PublishResult(success=True, artifacts=list(artifacts))
+
+        pr = _publish_built_artifacts(
+            target, list(artifacts), dry_run, package_manager
+        )
+
+        if not dry_run:
+            event = "publish_succeeded" if pr.success else "publish_failed"
+            err = None if pr.success else (pr.error or "publish failed")
+
+            try:
+                run_config_hooks(
+                    config,
+                    event,
+                    repo_root,
+                    dry_run=dry_run,
+                    package=label,
+                    tag_names=release_tag_names,
+                    commit_sha=release_commit_sha,
+                    error=err,
+                )
+            except HookExecutionError as hook_exc:
+                return PublishResult(
+                    success=False,
+                    artifacts=pr.artifacts,
+                    error=str(hook_exc),
+                )
+
+        return pr
 
     def _run_optional_build_publish(
         self,
@@ -234,6 +314,8 @@ class DistliftApplication:
         publish: bool,
         *,
         registry: PluginRegistry,
+        release_tag_names: list[str] | None = None,
+        release_commit_sha: str | None = None,
     ) -> PublishRunResult:
         """Build and optionally publish per targeted package root.
 
@@ -246,6 +328,8 @@ class DistliftApplication:
                 project.
             publish: When ``True``, build and invoke the registry publisher.
             registry: Loaded plugin registry (must match release planning).
+            release_tag_names: Tags created by the release run, if any.
+            release_commit_sha: Release commit created by the release run.
 
         Returns:
             One result row per targeted package or project root.
@@ -263,21 +347,32 @@ class DistliftApplication:
                 )
                 target = prepare_simple_target(pkg_root, pkg_config, registry)
 
-                # Either publish (build+upload) or build-only per package
-                if publish:
-                    pr = _build_and_publish_target(target, dry_run)
-                else:
-                    pr = _build_target_only(target)
+                pr = self._build_publish_package_with_hooks(
+                    config,
+                    repo_root,
+                    target,
+                    pkg.name,
+                    dry_run,
+                    publish,
+                    release_tag_names=release_tag_names,
+                    release_commit_sha=release_commit_sha,
+                )
                 projects_out.append((pkg.name, pr))
 
         else:
             target = prepare_simple_target(repo_root, config, registry)
             label = target.package_name or repo_root.name
 
-            if publish:
-                pr = _build_and_publish_target(target, dry_run)
-            else:
-                pr = _build_target_only(target)
+            pr = self._build_publish_package_with_hooks(
+                config,
+                repo_root,
+                target,
+                label,
+                dry_run,
+                publish,
+                release_tag_names=release_tag_names,
+                release_commit_sha=release_commit_sha,
+            )
             projects_out.append((label, pr))
 
         success = all(pr.success for _, pr in projects_out)
@@ -304,11 +399,34 @@ class DistliftApplication:
                 registry = self._default_registry(request.config)
             plan = compute_simple_release_plan(request, registry)
             executor = ReleaseExecutor(registry=registry)
-            return executor.execute(plan)
+
+            return executor.execute(plan, request.config)
         except Exception as exc:
             from distlift.logging_utils import get_logger
 
             get_logger(__name__).error("Release planning failed: %s", exc)
+
+            if not request.dry_run:
+                try:
+                    run_config_hooks(
+                        request.config,
+                        "release_failed",
+                        request.repo_root,
+                        dry_run=request.dry_run,
+                        error=str(exc),
+                    )
+                except HookExecutionError as hook_exc:
+                    get_logger(__name__).error(
+                        "release_failed hook failed: %s",
+                        hook_exc,
+                        exc_info=True,
+                    )
+                    return ReleaseResult(
+                        success=False,
+                        dry_run=request.dry_run,
+                        error=str(hook_exc),
+                    )
+
             return ReleaseResult(
                 success=False, dry_run=request.dry_run, error=str(exc)
             )
@@ -333,13 +451,36 @@ class DistliftApplication:
                 registry = self._default_registry(request.config)
             plan = compute_monorepo_release_plan(request, registry)
             executor = ReleaseExecutor(registry=registry)
-            return executor.execute(plan)
+
+            return executor.execute(plan, request.config)
         except Exception as exc:
             from distlift.logging_utils import get_logger
 
             get_logger(__name__).error(
                 "Monorepo release planning failed: %s", exc
             )
+
+            if not request.dry_run:
+                try:
+                    run_config_hooks(
+                        request.config,
+                        "release_failed",
+                        request.repo_root,
+                        dry_run=request.dry_run,
+                        error=str(exc),
+                    )
+                except HookExecutionError as hook_exc:
+                    get_logger(__name__).error(
+                        "release_failed hook failed: %s",
+                        hook_exc,
+                        exc_info=True,
+                    )
+                    return ReleaseResult(
+                        success=False,
+                        dry_run=request.dry_run,
+                        error=str(hook_exc),
+                    )
+
             return ReleaseResult(
                 success=False, dry_run=request.dry_run, error=str(exc)
             )
@@ -384,13 +525,31 @@ class DistliftApplication:
                     target = prepare_simple_target(
                         pkg_root, pkg_config, registry
                     )
-                    pr = _build_and_publish_target(target, dry_run)
+                    pr = self._build_publish_package_with_hooks(
+                        config,
+                        repo_root.resolve(),
+                        target,
+                        pkg.name,
+                        dry_run,
+                        True,
+                        release_tag_names=None,
+                        release_commit_sha=None,
+                    )
                     projects_out.append((pkg.name, pr))
 
             else:
                 target = prepare_simple_target(repo_root, config, registry)
                 label = target.package_name or repo_root.resolve().name
-                pr = _build_and_publish_target(target, dry_run)
+                pr = self._build_publish_package_with_hooks(
+                    config,
+                    repo_root.resolve(),
+                    target,
+                    label,
+                    dry_run,
+                    True,
+                    release_tag_names=None,
+                    release_commit_sha=None,
+                )
                 projects_out.append((label, pr))
 
             success = all(pr.success for _, pr in projects_out)
@@ -399,7 +558,26 @@ class DistliftApplication:
         except Exception as exc:
             from distlift.logging_utils import get_logger
 
-            get_logger(__name__).error("Publish failed: %s", exc)
+            log = get_logger(__name__)
+            log.error("Publish failed: %s", exc)
+
+            if not dry_run:
+                try:
+                    run_config_hooks(
+                        config,
+                        "release_failed",
+                        repo_root.resolve(),
+                        dry_run=dry_run,
+                        error=str(exc),
+                    )
+                except HookExecutionError as hook_exc:
+                    log.error(
+                        "release_failed hook failed: %s",
+                        hook_exc,
+                        exc_info=True,
+                    )
+                    return PublishRunResult(success=False, error=str(hook_exc))
+
             return PublishRunResult(success=False, error=str(exc))
 
     def load_effective_config(

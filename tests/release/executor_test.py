@@ -4,6 +4,7 @@ from distlift.config.models import (
     BumpKind,
     Language,
     ReleaseMode,
+    ResolvedConfig,
     VersionSource,
 )
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
@@ -52,7 +53,7 @@ class TestDryRunExecution:
             repo_root=tmp_python_project,
         )
         executor = ReleaseExecutor(registry=registry)
-        result = executor.execute(plan)
+        result = executor.execute(plan, ResolvedConfig())
         assert result.success
         assert result.dry_run
         assert result.tag_names == ["v0.1.1"]

@@ -12,6 +12,7 @@ from distlift.app import DistliftApplication
 from distlift.cli_changelog import changelog_app
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
+from distlift.constants import ENV_PREFIX, HOOK_ENV_KEY_SUFFIXES
 from distlift.logging_utils import configure_logging
 from distlift.plugins.base import DistliftPlugin
 from distlift.release.models import (
@@ -463,6 +464,20 @@ def list_config_command(
         "  changelog.compare_url_template : %s"
         % (ch.compare_url_template or "(auto)")
     )
+    hooks = config.hooks
+    typer.echo("  hooks (counts per event):")
+    typer.echo(f"    tag_pushed        : {len(hooks.tag_pushed)}")
+    typer.echo(f"    tag_push_failed   : {len(hooks.tag_push_failed)}")
+    typer.echo(f"    release_failed    : {len(hooks.release_failed)}")
+    typer.echo(f"    build_succeeded   : {len(hooks.build_succeeded)}")
+    typer.echo(f"    build_failed      : {len(hooks.build_failed)}")
+    typer.echo(f"    publish_succeeded : {len(hooks.publish_succeeded)}")
+    typer.echo(f"    publish_failed    : {len(hooks.publish_failed)}")
+    typer.echo("  optional hook env append (after TOML merge), e.g.:")
+    for _ev, suf in sorted(
+        HOOK_ENV_KEY_SUFFIXES.items(), key=lambda item: item[0]
+    ):
+        typer.echo(f"    {ENV_PREFIX}HOOKS_{suf}")
 
     if config.field_sources:
         typer.echo("\nField sources:")

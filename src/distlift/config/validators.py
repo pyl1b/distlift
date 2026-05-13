@@ -4,6 +4,7 @@ import re
 
 from distlift.config.models import (
     BumpKind,
+    HookSpec,
     ReleaseMode,
     ResolvedConfig,
     VersionFormat,
@@ -22,6 +23,7 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
     validate_remote_names(config)
     validate_tag_template(config)
     validate_changelog_config(config)
+    validate_hooks_config(config)
 
     if config.mode == ReleaseMode.MONOREPO:
         validate_monorepo_config(config)
@@ -35,6 +37,65 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
 _KEEP_A_CHANGELOG_SECTION_TITLES = frozenset(
     {"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
 )
+
+_MAX_HOOKS_PER_EVENT = 64
+
+
+def _validate_hook_spec(spec: HookSpec, *, ctx: str) -> None:
+    """Ensure ``spec`` has exactly one of ``shell`` or ``argv``.
+
+    Args:
+        spec: Hook entry to validate.
+        ctx: Description of the config location for error messages.
+    """
+    has_shell = spec.shell is not None and str(spec.shell).strip() != ""
+    has_argv = spec.argv is not None
+
+    if has_shell and has_argv:
+        raise ConfigurationError(f"{ctx}: hook cannot set both shell and argv")
+
+    if not has_shell and not has_argv:
+        raise ConfigurationError(f"{ctx}: hook must set either shell or argv")
+
+    if has_argv:
+        assert spec.argv is not None
+        if not spec.argv:
+            raise ConfigurationError(f"{ctx}: hook argv cannot be empty")
+
+        for i, arg in enumerate(spec.argv):
+            if not str(arg).strip():
+                raise ConfigurationError(
+                    f"{ctx}: hook argv entry {i} cannot be empty"
+                )
+
+
+def validate_hooks_config(config: ResolvedConfig) -> None:
+    """Validate hook command lists on the resolved configuration.
+
+    Args:
+        config: Fully merged configuration including ``hooks``.
+    """
+    h = config.hooks
+
+    for field_name in (
+        "tag_pushed",
+        "tag_push_failed",
+        "release_failed",
+        "build_succeeded",
+        "build_failed",
+        "publish_succeeded",
+        "publish_failed",
+    ):
+        specs = getattr(h, field_name)
+
+        if len(specs) > _MAX_HOOKS_PER_EVENT:
+            raise ConfigurationError(
+                f"hooks.{field_name} cannot list more than "
+                f"{_MAX_HOOKS_PER_EVENT} commands"
+            )
+
+        for i, spec in enumerate(specs):
+            _validate_hook_spec(spec, ctx=f"hooks.{field_name}[{i}]")
 
 
 def validate_changelog_config(config: ResolvedConfig) -> None:

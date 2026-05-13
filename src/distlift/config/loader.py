@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from collections.abc import Mapping
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from distlift.config.models import (
+    HooksConfig,
+    HookSpec,
     Language,
     ManagedPackageConfig,
     MonorepoConfig,
@@ -18,7 +21,12 @@ from distlift.config.models import (
     VersionFormat,
     VersionSource,
 )
-from distlift.constants import ENV_PREFIX, PYPROJECT_TOOL_KEY
+from distlift.constants import (
+    ENV_PREFIX,
+    HOOK_ENV_KEY_SUFFIXES,
+    PYPROJECT_TOOL_KEY,
+)
+from distlift.errors import ConfigurationError
 
 _CHANGELOG_ALLOWED_KEYS = frozenset(
     {
@@ -50,6 +58,124 @@ def _changelog_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
         for k, v in mapping.items()
         if str(k) in _CHANGELOG_ALLOWED_KEYS
     }
+
+
+_HOOK_LIST_FIELDS = frozenset(
+    {
+        "tag_pushed",
+        "tag_push_failed",
+        "release_failed",
+        "build_succeeded",
+        "build_failed",
+        "publish_succeeded",
+        "publish_failed",
+    }
+)
+
+
+def _hook_spec_from_toml_item(item: Any) -> HookSpec:
+    """Convert one TOML hook table entry or string into a ``HookSpec``.
+
+    Args:
+        item: A string (shell command) or a mapping with ``shell`` or
+            ``argv``.
+    """
+    if isinstance(item, str):
+        return HookSpec(shell=item)
+
+    if isinstance(item, dict):
+        shell = item.get("shell")
+        argv = item.get("argv")
+
+        if shell is not None and argv is not None:
+            msg = "Hook entry cannot set both 'shell' and 'argv'"
+            raise ValueError(msg)
+
+        if shell is not None:
+            return HookSpec(shell=str(shell))
+
+        if argv is not None:
+            if not isinstance(argv, list):
+                msg = "Hook 'argv' must be a list of strings"
+                raise ValueError(msg)
+            return HookSpec(argv=[str(x) for x in argv])
+
+    msg = "Hook entry must be a string or table with 'shell' or 'argv'"
+    raise ValueError(msg)
+
+
+def _hook_specs_from_toml_list(raw: Any) -> list[HookSpec]:
+    """Parse a TOML list of hook entries into ``HookSpec`` objects.
+
+    Args:
+        raw: Sequence of hook entry values under an event key.
+    """
+    if not isinstance(raw, list):
+        return []
+
+    return [_hook_spec_from_toml_item(x) for x in raw]
+
+
+def hooks_config_from_mapping(mapping: Any) -> HooksConfig:
+    """Build a ``HooksConfig`` from a parsed ``[hooks]`` table or similar.
+
+    Args:
+        mapping: Parsed mapping whose keys are hook event names.
+    """
+    if not isinstance(mapping, dict):
+        return HooksConfig()
+
+    kw: dict[str, list[HookSpec]] = {}
+
+    for key in _HOOK_LIST_FIELDS:
+        if key not in mapping:
+            continue
+        kw[key] = _hook_specs_from_toml_list(mapping[key])
+
+    return HooksConfig(**kw)
+
+
+def parse_hooks_env_value(value: str) -> list[HookSpec]:
+    """Parse ``DISTLIFT_HOOKS_*`` text into hook specs.
+
+    When the trimmed value starts with ``[``, it is parsed as JSON: an array
+    of strings (shell hooks) or arrays of strings (``argv`` hooks). Otherwise
+    the value is split on newlines; each non-empty line is one shell hook.
+
+    Args:
+        value: Raw environment variable text.
+    """
+    trimmed = value.strip()
+
+    if not trimmed:
+        return []
+
+    if trimmed.startswith("["):
+        data = json.loads(trimmed)
+
+        if not isinstance(data, list):
+            msg = "DISTLIFT_HOOKS JSON must be a top-level array"
+            raise ValueError(msg)
+
+        specs: list[HookSpec] = []
+
+        for entry in data:
+            if isinstance(entry, str):
+                specs.append(HookSpec(shell=entry))
+                continue
+
+            if isinstance(entry, list):
+                specs.append(HookSpec(argv=[str(x) for x in entry]))
+                continue
+
+            msg = "Each DISTLIFT_HOOKS JSON entry must be a string or array"
+            raise ValueError(msg)
+
+        return specs
+
+    lines = [ln.strip() for ln in value.splitlines() if ln.strip()]
+
+    return [HookSpec(shell=ln) for ln in lines]
 
 
 def load_toml_config(path: Path) -> dict[str, Any]:
@@ -153,6 +279,28 @@ def load_environment_config(
     if changelog_env:
         result["changelog"] = changelog_env
 
+    hooks_append_kw: dict[str, list[HookSpec]] = {}
+
+    for event_key, suffix in HOOK_ENV_KEY_SUFFIXES.items():
+        raw_hook_env = env.get(f"{ENV_PREFIX}HOOKS_{suffix}")
+
+        if raw_hook_env is None or not str(raw_hook_env).strip():
+            continue
+
+        try:
+            hooks_append_kw[event_key] = parse_hooks_env_value(
+                str(raw_hook_env)
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ConfigurationError(
+                f"Invalid {ENV_PREFIX}HOOKS_{suffix} value: {exc}"
+            ) from exc
+
+    if hooks_append_kw:
+        result["hooks_append"] = HooksConfig(
+            **{fn: hooks_append_kw.get(fn, []) for fn in _HOOK_LIST_FIELDS}
+        )
+
     return result
 
 
@@ -233,6 +381,14 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
 
     changelog_overlay = _changelog_overlay_from_mapping(data.get("changelog"))
 
+    hooks = hooks_config_from_mapping(data.get("hooks", {}))
+
+    hooks_append_raw = data.get("hooks_append")
+    if isinstance(hooks_append_raw, HooksConfig):
+        hooks_append = hooks_append_raw
+    else:
+        hooks_append = hooks_config_from_mapping(hooks_append_raw or {})
+
     return RawConfig(
         language=language,
         mode=mode,
@@ -245,6 +401,8 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog_overlay=changelog_overlay,
+        hooks=hooks,
+        hooks_append=hooks_append,
         source=source,
     )
 
