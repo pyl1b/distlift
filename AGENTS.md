@@ -134,18 +134,22 @@ tracked in `ResolvedConfig.field_sources` for the `config show` command.
 Key environment variables: `DISTLIFT_LANGUAGE`, `DISTLIFT_MODE`,
 `DISTLIFT_REMOTES`, `DISTLIFT_DEFAULT_VERSION`, `DISTLIFT_VERSION_FORMAT`,
 `DISTLIFT_TAG_TEMPLATE`, `DISTLIFT_VERSION_SOURCE`, `DISTLIFT_MANIFEST_PATH`,
-`DISTLIFT_PLUGIN_PATHS`, `DISTLIFT_PLUGIN_DIRS`,
+`DISTLIFT_EDITOR`, `DISTLIFT_PLUGIN_PATHS`, `DISTLIFT_PLUGIN_DIRS`,
 `DISTLIFT_ENABLE_ENVIRONMENT_PLUGINS`, `DISTLIFT_ENABLE_BUILTIN_PLUGINS`,
 `DISTLIFT_CHANGELOG_ENABLED`, `DISTLIFT_CHANGELOG_PATH`,
 `DISTLIFT_CHANGELOG_COMPARE_URL_TEMPLATE`, `DISTLIFT_CHANGELOG_TITLE`,
 `DISTLIFT_CHANGELOG_PROMPT_EDITOR`.
 
 When `changelog.prompt_editor` is true (default), non–dry-run releases and
-`distlift changelog update` open `$GIT_EDITOR`, `$VISUAL`, or `$EDITOR` on the
-generated release fragment before writing. If `stdin` is not a TTY (typical CI),
-the generated entry is kept without prompting. Disable per run with
-`--no-changelog-editor` / `--no-editor`, or set `changelog.prompt_editor =
-false` / `DISTLIFT_CHANGELOG_PROMPT_EDITOR=false`.
+`distlift changelog update` open an editor on the generated release fragment
+before writing. The editor is resolved in this order: `$GIT_EDITOR`, then
+`$VISUAL`, then `$EDITOR`, then the top-level `editor` setting in distlift
+config (TOML key `editor` or `DISTLIFT_EDITOR`). The same lookup chain is
+used by `distlift config edit-user` and `distlift config edit-system`.
+If `stdin` is not a TTY (typical CI), the generated changelog entry is kept
+without prompting. Disable per run with `--no-changelog-editor` /
+`--no-editor`, or set `changelog.prompt_editor = false` /
+`DISTLIFT_CHANGELOG_PROMPT_EDITOR=false`.
 
 ---
 

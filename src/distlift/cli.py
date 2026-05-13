@@ -500,6 +500,7 @@ def list_config_command(
     typer.echo(f"  version_source  : {config.version_source}")
     typer.echo(f"  remotes         : {config.remotes}")
     typer.echo(f"  manifest_path   : {config.manifest_path}")
+    typer.echo(f"  editor          : {config.editor or '(unset)'}")
     ch = config.changelog
     typer.echo(f"  changelog.enabled : {ch.enabled}")
     typer.echo(f"  changelog.path    : {ch.path}")

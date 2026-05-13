@@ -52,12 +52,41 @@ class TestResolveEditorCommand:
         assert resolve_editor_command() == "vim"
 
     def test_falls_back_to_editor(self, monkeypatch) -> None:
-        """``EDITOR`` is the last-resort fallback."""
+        """``EDITOR`` is the last-resort env fallback."""
         monkeypatch.delenv("GIT_EDITOR", raising=False)
         monkeypatch.delenv("VISUAL", raising=False)
         monkeypatch.setenv("EDITOR", "nano")
 
         assert resolve_editor_command() == "nano"
+
+    def test_falls_back_to_config_when_env_unset(self, monkeypatch) -> None:
+        """``config_editor`` is used only when all env vars are blank."""
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        assert resolve_editor_command("code --wait") == "code --wait"
+
+    def test_config_editor_is_stripped(self, monkeypatch) -> None:
+        """Whitespace around the config-supplied editor is ignored."""
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        assert resolve_editor_command("  vim  ") == "vim"
+
+    def test_blank_config_editor_returns_none(self, monkeypatch) -> None:
+        """A whitespace-only config value falls through to ``None``."""
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        assert resolve_editor_command("   ") is None
+
+    def test_env_wins_over_config_editor(self, monkeypatch) -> None:
+        """Any env var with a value takes priority over the config value."""
+        monkeypatch.delenv("GIT_EDITOR", raising=False)
+        monkeypatch.delenv("VISUAL", raising=False)
+        monkeypatch.setenv("EDITOR", "nano")
+
+        assert resolve_editor_command("code --wait") == "nano"
 
 
 class TestFormatMissingEditorMessage:
@@ -75,6 +104,13 @@ class TestFormatMissingEditorMessage:
         msg = format_missing_editor_message(skip_hint="pass --no-foo.")
 
         assert msg.endswith("pass --no-foo.")
+
+    def test_mentions_distlift_config_fallback(self) -> None:
+        """The message documents the distlift config / env fallback path."""
+        msg = format_missing_editor_message()
+
+        assert "editor" in msg
+        assert "DISTLIFT_EDITOR" in msg
 
 
 class TestLaunchEditorBlocking:
@@ -156,3 +192,29 @@ class TestLaunchEditorBlocking:
         monkeypatch.setattr(editor.subprocess, "run", fake_run)
 
         assert launch_editor_blocking(target) == 42
+
+    def test_uses_config_editor_when_env_unset(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """A ``config_editor`` is launched when no env var is set."""
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        target = tmp_path / "config.toml"
+        target.write_text("", encoding="utf-8")
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, 0)
+
+        monkeypatch.setattr(editor.subprocess, "run", fake_run)
+
+        exit_code = launch_editor_blocking(
+            target, config_editor="myeditor --wait"
+        )
+
+        assert exit_code == 0
+        assert captured["argv"][0] == "myeditor"
+        assert captured["argv"][-1] == str(target)

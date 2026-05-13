@@ -258,6 +258,8 @@ class RawConfig:
         tag_template: Tag naming template including a version placeholder.
         version_source: Whether versions come from manifest or tags.
         manifest_path: Optional explicit manifest path as a string path.
+        editor: Optional external editor command used as a fallback when no
+            ``GIT_EDITOR`` / ``VISUAL`` / ``EDITOR`` env var is set.
         plugins: Plugin-related fields contributed by this layer.
         monorepo: Monorepo section contributed by this layer.
         changelog_overlay: Optional shallow overlay dict for ``changelog`` keys
@@ -276,6 +278,7 @@ class RawConfig:
     tag_template: str | None = None
     version_source: VersionSource | None = None
     manifest_path: str | None = None
+    editor: str | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog_overlay: dict[str, Any] = attrs.Factory(dict)
@@ -298,6 +301,9 @@ class ResolvedConfig:
         version_source: Whether the current version is read from manifest
             or from existing tags.
         manifest_path: Optional absolute manifest path when configured.
+        editor: Optional external editor command (e.g. ``"code --wait"``)
+            used when the standard editor env vars are unset; ``None`` means
+            no config-level fallback was provided.
         plugins: Effective plugin discovery and override settings.
         monorepo: Effective monorepo enable flag and merged package list.
         changelog: Effective Keep a Changelog generation settings.
@@ -314,6 +320,7 @@ class ResolvedConfig:
     tag_template: str = DEFAULT_TAG_TEMPLATE
     version_source: VersionSource = VersionSource.MANIFEST
     manifest_path: Path | None = None
+    editor: str | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog: ChangelogConfig = attrs.Factory(ChangelogConfig)

@@ -4,7 +4,9 @@
         "conftest",
         "corelib",
         "dataclasses",
+        "dedupe",
         "distlift",
+        "idxs",
         "pycache",
         "pypa",
         "pypi",
@@ -18,6 +20,7 @@
         "tomllib",
         "typer",
         "Typer",
+        "ufeff",
         "worktree"
     ]
 }

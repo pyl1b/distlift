@@ -42,7 +42,7 @@ def _minimal_plan(tmp_path: Path) -> ChangelogUpdatePlan:
 
 
 class TestMaybePromptEditChangelogEntry:
-    """Cover stdin, flags, and monkeypatched editor behaviour."""
+    """Cover stdin, flags, and monkey-patched editor behavior."""
 
     def test_skips_when_dry_run(self, tmp_path: Path) -> None:
         """Dry-run planning never opens an editor."""
@@ -114,7 +114,9 @@ class TestMaybePromptEditChangelogEntry:
             lambda: True,
         )
 
-        def fake_edit(initial: str) -> str:
+        def fake_edit(
+            initial: str, *, editor_command: str | None = None
+        ) -> str:
             entry = plan.inserted_release
             updated = ChangelogReleaseEntry(
                 version_label=entry.version_label,
@@ -143,3 +145,38 @@ class TestMaybePromptEditChangelogEntry:
         )
 
         assert out.inserted_release.sections[0].bullets == ["from-editor"]
+
+    def test_forwards_editor_command(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """The ``editor_command`` kwarg is threaded into the editor helper."""
+        plan = _minimal_plan(tmp_path)
+        monkeypatch.setattr(
+            "distlift.changelog.editor_prompt.sys.stdin.isatty",
+            lambda: True,
+        )
+
+        captured: dict[str, str | None] = {"editor_command": "<missing>"}
+
+        def fake_edit(
+            initial: str, *, editor_command: str | None = None
+        ) -> str:
+            captured["editor_command"] = editor_command
+            return render_release_entry(plan.inserted_release)
+
+        monkeypatch.setattr(
+            "distlift.changelog.editor_prompt.edit_text_in_external_editor",
+            fake_edit,
+        )
+
+        maybe_prompt_edit_changelog_entry(
+            plan,
+            changelog_prompt_editor=True,
+            skip_changelog_editor=False,
+            dry_run=False,
+            editor_command="code --wait",
+        )
+
+        assert captured["editor_command"] == "code --wait"

@@ -59,6 +59,12 @@
       "default": ""
     },
     {
+      "id": "distlift.configFiles.extraArgs",
+      "type": "promptString",
+      "description": "Extra args for config init-* / edit-* (e.g. --force or --no-create)",
+      "default": ""
+    },
+    {
       "id": "distlift.plugins.extraArgs",
       "type": "promptString",
       "description": "Extra args for plugins list",
@@ -244,6 +250,130 @@
           "shell": { "executable": "/bin/sh", "args": ["-c"] }
         },
         "command": "\"${input:distlift.pythonExe}\" -m distlift config validate ${input:distlift.config.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config init-user",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config init-system",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-system ${input:distlift.configFiles.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-system ${input:distlift.configFiles.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config init-system ${input:distlift.configFiles.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config edit-user",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-user ${input:distlift.configFiles.extraArgs}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "distlift: CLI — config edit-system",
+      "type": "shell",
+      "windows": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-system ${input:distlift.configFiles.extraArgs}"
+      },
+      "linux": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-system ${input:distlift.configFiles.extraArgs}"
+      },
+      "osx": {
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "shell": { "executable": "/bin/sh", "args": ["-c"] }
+        },
+        "command": "\"${input:distlift.pythonExe}\" -m distlift config edit-system ${input:distlift.configFiles.extraArgs}"
       },
       "presentation": {
         "reveal": "always",

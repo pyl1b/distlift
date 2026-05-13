@@ -207,4 +207,5 @@ def compute_monorepo_release_plan(
         plan,
         changelog_prompt_editor=request.config.changelog.prompt_editor,
         skip_changelog_editor=request.skip_changelog_editor,
+        editor_command=request.config.editor,
     )

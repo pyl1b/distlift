@@ -4,8 +4,9 @@ from pathlib import Path
 
 ENV_PREFIX = "DISTLIFT_"
 
-# ``DISTLIFT_HOOKS_<SUFFIX>`` appends hook specs after merged TOML (see loader).
-# Suffix is SCREAMING_SNAKE of the event key (``tag_pushed`` -> ``TAG_PUSHED``).
+# ``DISTLIFT_HOOKS_<SUFFIX>`` appends hook specs after merged TOML (see
+# loader). Suffix is SCREAMING_SNAKE of the event key
+# (``tag_pushed`` -> ``TAG_PUSHED``).
 HOOK_ENV_KEY_SUFFIXES: dict[str, str] = {
     "tag_pushed": "TAG_PUSHED",
     "tag_push_failed": "TAG_PUSH_FAILED",

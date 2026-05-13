@@ -1,6 +1,6 @@
 """Resolve and launch the user's preferred external text editor.
 
-This module centralises editor handling so both the changelog editing flow
+This module centralizes editor handling so both the changelog editing flow
 and the configuration ``edit-user`` / ``edit-system`` commands share the
 same convention for picking an editor.
 """
@@ -26,8 +26,22 @@ EDITOR_ENV_VARS: tuple[str, ...] = ("GIT_EDITOR", "VISUAL", "EDITOR")
 """
 
 
-def resolve_editor_command() -> str | None:
-    """Return the first non-empty editor preference from the environment.
+def resolve_editor_command(
+    config_editor: str | None = None,
+) -> str | None:
+    """Return the first non-empty editor preference for this run.
+
+    Resolution order:
+
+    1. ``GIT_EDITOR`` environment variable
+    2. ``VISUAL`` environment variable
+    3. ``EDITOR`` environment variable
+    4. ``config_editor`` (e.g. merged ``ResolvedConfig.editor`` from TOML or
+       ``DISTLIFT_EDITOR``) when all env vars above are unset or blank
+
+    Args:
+        config_editor: Optional editor command sourced from distlift's
+            configuration layer, used as a last-resort fallback.
 
     Returns:
         A shell-style editor command string, or ``None`` when unset.
@@ -43,6 +57,13 @@ def resolve_editor_command() -> str | None:
 
         if stripped:
             return stripped
+
+    # Final fallback: distlift's own ``editor`` config value
+    if config_editor is not None:
+        stripped_cfg = str(config_editor).strip()
+
+        if stripped_cfg:
+            return stripped_cfg
 
     return None
 
@@ -63,7 +84,11 @@ def format_missing_editor_message(skip_hint: str | None = None) -> str:
         "VISUAL (POSIX convention for a full-screen editor, "
         "e.g. 'vim', 'nano', or 'code --wait'), or "
         "EDITOR (POSIX fallback for a basic editor command, "
-        "e.g. 'notepad' on Windows)."
+        "e.g. 'notepad' on Windows). "
+        "As a tool-specific fallback you can also set "
+        "'editor' in your distlift config "
+        "(distlift.toml / user / system) or "
+        "DISTLIFT_EDITOR in the environment."
     )
 
     if skip_hint:
@@ -88,6 +113,7 @@ def launch_editor_blocking(
     path: Path,
     *,
     skip_hint: str | None = None,
+    config_editor: str | None = None,
 ) -> int:
     """Open ``path`` in the user's editor and wait for the process to exit.
 
@@ -96,14 +122,16 @@ def launch_editor_blocking(
             responsible for ensuring the path exists.
         skip_hint: Optional hint included in the error raised when no editor
             is configured (e.g. CLI flag or config key to skip the prompt).
+        config_editor: Optional editor command sourced from distlift's
+            configuration layer, used when no editor env var is set.
 
     Returns:
         The editor subprocess exit code.
 
     Raises:
-        ConfigurationError: When no editor environment variable is set.
+        ConfigurationError: When no editor source (env var or config) is set.
     """
-    editor_cmd = resolve_editor_command()
+    editor_cmd = resolve_editor_command(config_editor)
 
     if editor_cmd is None:
         raise ConfigurationError(format_missing_editor_message(skip_hint))

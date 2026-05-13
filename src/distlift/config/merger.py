@@ -284,6 +284,13 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         None,
         field_sources,
     )
+    editor = merge_optional_scalar(
+        layers,
+        lambda layer: layer.editor,
+        "editor",
+        None,
+        field_sources,
+    )
 
     # Merge plugin config so later layers override earlier plugin fields
     plugin_config = PluginConfig()
@@ -327,6 +334,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         tag_template=tag_template,
         version_source=version_source,
         manifest_path=Path(manifest_path_str) if manifest_path_str else None,
+        editor=editor,
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog=changelog_config,

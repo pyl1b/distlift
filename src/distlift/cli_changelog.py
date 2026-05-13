@@ -249,6 +249,7 @@ def changelog_update_command(
         changelog_prompt_editor=config.changelog.prompt_editor,
         skip_changelog_editor=no_editor,
         dry_run=False,
+        editor_command=config.editor,
     )
 
     write_changelog_document(plan.path, plan.new_document)

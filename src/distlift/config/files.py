@@ -2,8 +2,10 @@
 
 This module supports the ``distlift config init-user``,
 ``distlift config init-system``, ``distlift config edit-user``, and
-``distlift config edit-system`` commands. It deliberately performs no
-configuration parsing -- it only manages the files on disk.
+``distlift config edit-system`` commands. It manages the files on disk and,
+for the ``edit-*`` commands, also resolves the merged ``editor`` setting
+from the system and user TOML layers plus ``DISTLIFT_EDITOR`` so that the
+configured editor (if any) is honored as a fallback.
 """
 
 from __future__ import annotations
@@ -11,6 +13,8 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
+from distlift.config.loader import load_config_layers
+from distlift.config.merger import merge_config_layers
 from distlift.constants import (
     DEFAULT_SYSTEM_CONFIG_PATHS,
     DEFAULT_USER_CONFIG_PATHS,
@@ -58,6 +62,11 @@ STUB_CONFIG_CONTENT: str = """\
 # version_source = "manifest"         # manifest | tag
 # manifest_path = "pyproject.toml"
 # remotes = ["origin"]
+
+# Optional editor command used as a fallback when neither GIT_EDITOR,
+# VISUAL, nor EDITOR is set in the environment. The same string can be
+# supplied via the DISTLIFT_EDITOR environment variable.
+# editor = "code --wait"
 
 # [changelog]
 # enabled = true
@@ -184,6 +193,28 @@ def create_config_file(
     return path, True
 
 
+def _resolve_global_editor_command() -> str | None:
+    """Return the merged ``editor`` setting from system + user + env layers.
+
+    The ``config edit-*`` commands intentionally operate without a repo
+    root, so this only loads the global layers (system file, user file,
+    ``DISTLIFT_EDITOR``). When none of them specify ``editor``, ``None`` is
+    returned and the call site relies solely on the environment editor
+    variables.
+    """
+    try:
+        layers = load_config_layers(repo_root=None)
+        resolved = merge_config_layers(layers)
+    except ConfigurationError:
+        log.debug(
+            "Could not load global config layers for editor resolution",
+            exc_info=True,
+        )
+        return None
+
+    return resolved.editor
+
+
 def open_config_file_in_editor(
     scope: ConfigScope,
     *,
@@ -203,8 +234,9 @@ def open_config_file_in_editor(
 
     Raises:
         ConfigurationError: When the target location cannot be determined,
-            when no editor environment variable is set, or when the file is
-            missing and ``create_if_missing`` is False.
+            when no editor environment variable or config ``editor`` is
+            set, or when the file is missing and ``create_if_missing`` is
+            False.
         OSError: When the file or its parent directories cannot be created.
     """
     path = get_config_path(scope)
@@ -219,6 +251,10 @@ def open_config_file_in_editor(
         # Seed a stub so the editor opens a meaningful file the first time
         create_config_file(scope, force=False)
 
-    exit_code = launch_editor_blocking(path)
+    # Read merged ``editor`` from system + user + env so the configured
+    # fallback is honored when no editor env var is set
+    config_editor = _resolve_global_editor_command()
+
+    exit_code = launch_editor_blocking(path, config_editor=config_editor)
 
     return path, exit_code

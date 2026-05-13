@@ -219,6 +219,94 @@
       ]
     },
     {
+      "name": "distlift: config init-user",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "init-user"]
+    },
+    {
+      "name": "distlift: config init-user (--force)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "init-user", "--force"]
+    },
+    {
+      "name": "distlift: config init-system",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "init-system"]
+    },
+    {
+      "name": "distlift: config init-system (--force)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "init-system", "--force"]
+    },
+    {
+      "name": "distlift: config edit-user",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "edit-user"]
+    },
+    {
+      "name": "distlift: config edit-user (--no-create)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "edit-user", "--no-create"]
+    },
+    {
+      "name": "distlift: config edit-system",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "edit-system"]
+    },
+    {
+      "name": "distlift: config edit-system (--no-create)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "distlift",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "python": "${input:distlift.pythonExe}",
+      "justMyCode": true,
+      "args": ["config", "edit-system", "--no-create"]
+    },
+    {
       "name": "distlift: plugins list",
       "type": "debugpy",
       "request": "launch",

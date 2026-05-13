@@ -6,6 +6,7 @@
 
 - User hooks
 - Change-log editor.
+- Ability to create and edit user-level and system-level configuration files.
 
 ### Changed
 

@@ -144,16 +144,33 @@ class TestCreateConfigFile:
 class TestOpenConfigFileInEditor:
     """Cover editor launch, auto-create, and error paths."""
 
-    def _stub_editor(self, monkeypatch, exit_code: int = 0) -> dict[str, Any]:
+    def _stub_editor(
+        self,
+        monkeypatch,
+        exit_code: int = 0,
+        *,
+        config_editor: str | None = None,
+    ) -> dict[str, Any]:
         """Replace ``subprocess.run`` so no real editor is launched.
 
         Args:
             monkeypatch: Pytest monkeypatch fixture.
             exit_code: Exit status the fake editor process reports.
+            config_editor: Value returned by the patched global-editor
+                resolver, simulating what a real user/system TOML layer
+                would provide. ``None`` disables the config fallback.
         """
         for key in EDITOR_ENV_VARS:
             monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("EDITOR", "myeditor")
+
+        # Avoid hitting real user/system config files when resolving the
+        # configured editor fallback during tests
+        monkeypatch.setattr(
+            files_module,
+            "_resolve_global_editor_command",
+            lambda: config_editor,
+        )
 
         captured: dict[str, Any] = {}
 
@@ -212,3 +229,37 @@ class TestOpenConfigFileInEditor:
         _, exit_code = open_config_file_in_editor(ConfigScope.USER)
 
         assert exit_code == 7
+
+    def test_uses_config_editor_when_env_unset(
+        self, fake_user_path: Path, monkeypatch
+    ) -> None:
+        """When env vars are unset, the merged ``editor`` setting is used."""
+        captured = self._stub_editor(monkeypatch, config_editor="code --wait")
+
+        # Remove the env editor that ``_stub_editor`` defaulted to so the
+        # config fallback is the only available source
+        monkeypatch.delenv("EDITOR", raising=False)
+
+        open_config_file_in_editor(ConfigScope.USER)
+
+        argv = captured["argv"]
+        assert argv[0] == "code"
+        assert "--wait" in argv
+        assert argv[-1] == str(fake_user_path)
+
+    def test_raises_when_no_env_and_no_config(
+        self, fake_user_path: Path, monkeypatch
+    ) -> None:
+        """Without env vars and config editor, a typed error is raised."""
+        self._stub_editor(monkeypatch, config_editor=None)
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        with pytest.raises(ConfigurationError) as excinfo:
+            open_config_file_in_editor(ConfigScope.USER)
+
+        # The verbose message should mention the configured fallback too
+        message = str(excinfo.value)
+        assert "DISTLIFT_EDITOR" in message
+        for key in EDITOR_ENV_VARS:
+            assert key in message

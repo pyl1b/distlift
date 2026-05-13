@@ -121,6 +121,9 @@ class ReleasePlan:
             the plan was built (whether interactive editing is desired).
         skip_changelog_editor: When True, skip opening an editor regardless of
             ``changelog_prompt_editor``.
+        editor_command: Snapshot of ``ResolvedConfig.editor`` used as a
+            fallback editor command when no ``GIT_EDITOR``/``VISUAL``/
+            ``EDITOR`` env var is set during plan execution.
 
     Properties:
         has_manifest_updates: True when any package requires a manifest
@@ -137,6 +140,7 @@ class ReleasePlan:
     repo_root: Path
     changelog_prompt_editor: bool = True
     skip_changelog_editor: bool = False
+    editor_command: str | None = None
 
     @property
     def has_manifest_updates(self) -> bool:

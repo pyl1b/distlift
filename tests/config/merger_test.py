@@ -85,3 +85,23 @@ class TestMergeConfigLayers:
         assert config.changelog.path == "A.md"
         assert config.changelog.enabled is False
         assert config.changelog.prompt_editor is False
+
+    def test_editor_defaults_to_none(self) -> None:
+        """A merged config exposes ``editor=None`` when no layer sets it."""
+
+        # Merge a layer that does not configure the editor field.
+        config = merge_config_layers([RawConfig(source="a")])
+
+        # Confirm the default is ``None`` for downstream callers.
+        assert config.editor is None
+
+    def test_editor_propagated_and_overrides(self) -> None:
+        """Later layers override the earlier editor and field source updates."""
+
+        layer1 = RawConfig(editor="nano", source="user")
+        layer2 = RawConfig(editor="code --wait", source="environment")
+
+        config = merge_config_layers([layer1, layer2])
+
+        assert config.editor == "code --wait"
+        assert config.field_sources.get("editor") == "environment"

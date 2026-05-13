@@ -41,3 +41,21 @@ class TestLoadEnvironmentConfig:
 
         # Confirm plugin paths are nested under the plugin config key.
         assert data["plugins"]["paths"] == ["a.py", "b.py"]
+
+    def test_parses_editor(self) -> None:
+        """``DISTLIFT_EDITOR`` is exposed as a top-level ``editor`` string."""
+
+        # Load an environment specifying a custom editor command.
+        data = load_environment_config({"DISTLIFT_EDITOR": "code --wait"})
+
+        # Confirm the editor value flows into the raw config dict.
+        assert data["editor"] == "code --wait"
+
+    def test_blank_editor_is_ignored(self) -> None:
+        """A whitespace-only ``DISTLIFT_EDITOR`` is treated as unset."""
+
+        # Load an environment with a blank editor value.
+        data = load_environment_config({"DISTLIFT_EDITOR": "   "})
+
+        # Confirm the blank value is not propagated to the raw config.
+        assert "editor" not in data

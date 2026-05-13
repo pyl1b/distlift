@@ -35,11 +35,17 @@ _CHANGELOG_SKIP_HINT = (
 )
 
 
-def edit_text_in_external_editor(initial: str) -> str:
+def edit_text_in_external_editor(
+    initial: str,
+    *,
+    editor_command: str | None = None,
+) -> str:
     """Write ``initial`` to a temp file, spawn the editor, return body.
 
     Args:
         initial: Markdown seeded before the editor opens.
+        editor_command: Optional editor command sourced from distlift's
+            configuration; used when no editor env var is set.
 
     Returns:
         File contents after the editor process exits successfully.
@@ -64,7 +70,9 @@ def edit_text_in_external_editor(initial: str) -> str:
         # Block until the editor exits; rely on its status for success
         try:
             exit_code = launch_editor_blocking(
-                path, skip_hint=_CHANGELOG_SKIP_HINT
+                path,
+                skip_hint=_CHANGELOG_SKIP_HINT,
+                config_editor=editor_command,
             )
         except ConfigurationError as exc:
             raise ChangelogError(str(exc)) from exc
@@ -93,6 +101,7 @@ def maybe_prompt_edit_changelog_entry(
     changelog_prompt_editor: bool,
     skip_changelog_editor: bool,
     dry_run: bool,
+    editor_command: str | None = None,
 ) -> ChangelogUpdatePlan:
     """Optionally open an editor so the user can revise the inserted entry.
 
@@ -101,6 +110,8 @@ def maybe_prompt_edit_changelog_entry(
         changelog_prompt_editor: Effective ``changelog.prompt_editor`` flag.
         skip_changelog_editor: CLI-driven skip overriding interactive editing.
         dry_run: When True, return ``update_plan`` unchanged.
+        editor_command: Optional editor command sourced from distlift's
+            configuration; used when no editor env var is set.
     """
     if dry_run:
         return update_plan
@@ -121,7 +132,9 @@ def maybe_prompt_edit_changelog_entry(
     # Render, edit, parse, and splice the structured release back into the doc
     initial = render_release_entry(update_plan.inserted_release)
 
-    edited_raw = edit_text_in_external_editor(initial)
+    edited_raw = edit_text_in_external_editor(
+        initial, editor_command=editor_command
+    )
     edited_entry = parse_release_entry_markdown(edited_raw)
 
     validate_edited_release_version_label(

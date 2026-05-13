@@ -195,6 +195,39 @@ distlift config edit-system
 System-level files on Windows often live under shared “Program Data” folders
 and may need administrator rights to edit.
 
+### Choosing the text editor
+
+Whenever distlift needs to open a file in an editor (when polishing a
+generated changelog entry, or when you run `distlift config edit-user` or
+`distlift config edit-system`), it looks for a command to launch in this
+order:
+
+1. The `GIT_EDITOR` environment variable (the same one Git itself uses for
+   commit messages).
+2. The `VISUAL` environment variable (the POSIX convention for a
+   full-screen editor such as `vim`, `nano`, or `code --wait`).
+3. The `EDITOR` environment variable (the older POSIX fallback,
+   e.g. `notepad` on Windows).
+4. The `editor` setting from your **distlift config** file, or the
+   `DISTLIFT_EDITOR` environment variable.
+
+So if none of the standard editor environment variables are set on your
+system, you can still tell distlift which editor to use by writing one
+line in your user config:
+
+```toml
+editor = "code --wait"
+```
+
+You can place that in any distlift TOML layer
+(`distlift.toml` / `.distlift.toml`, `[tool.distlift]` inside
+`pyproject.toml`, your user config file, or the system one). The values
+saved by `distlift config init-user` already include a commented-out
+example.
+
+`distlift config show` prints the effective editor (or `(unset)` when no
+layer provides one).
+
 ## Plugins
 
 **List extensions distlift loaded** (built-ins and any you configured):

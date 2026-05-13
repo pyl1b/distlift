@@ -256,6 +256,7 @@ class ReleaseExecutor:
                 changelog_prompt_editor=plan.changelog_prompt_editor,
                 skip_changelog_editor=plan.skip_changelog_editor,
                 dry_run=plan.dry_run,
+                editor_command=plan.editor_command,
             )
 
             log.info("Writing changelog %s", update_plan.path)
@@ -327,7 +328,8 @@ class ReleaseExecutor:
             plan: Active release plan.
             git: Repository handle for the same repo_root as the plan.
             pushed_out: List mutated in place with each remote that fully
-                finishes branch and tag pushes (for partial progress on errors).
+                finishes branch and tag pushes (for partial progress on
+                errors).
         """
         branch = git.get_current_branch()
 

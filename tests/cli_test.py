@@ -37,6 +37,7 @@ class TestCLI:
             app, ["config", "show", "--repo-root", str(tmp_path)]
         )
         assert result.exit_code == 0
+        assert "editor" in result.output
 
     def test_plugins_list_runs(self, tmp_path):
         result = runner.invoke(
@@ -262,16 +263,32 @@ class TestConfigInitAndEditCommands:
         )
         return user_path, system_path
 
-    def _stub_editor(self, monkeypatch, exit_code: int = 0) -> dict[str, Any]:
+    def _stub_editor(
+        self,
+        monkeypatch,
+        exit_code: int = 0,
+        *,
+        config_editor: str | None = None,
+    ) -> dict[str, Any]:
         """Replace ``subprocess.run`` so no real editor is launched.
 
         Args:
             monkeypatch: Pytest monkeypatch fixture.
             exit_code: Exit status the fake editor process reports.
+            config_editor: Value to return from the merged-config editor
+                resolver, isolating tests from the host's real config.
         """
         for key in EDITOR_ENV_VARS:
             monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("EDITOR", "myeditor")
+
+        # Avoid hitting real user/system config files when resolving the
+        # configured editor fallback during CLI tests
+        monkeypatch.setattr(
+            files_module,
+            "_resolve_global_editor_command",
+            lambda: config_editor,
+        )
 
         captured: dict[str, Any] = {}
 
@@ -375,6 +392,13 @@ class TestConfigInitAndEditCommands:
         for key in EDITOR_ENV_VARS:
             monkeypatch.delenv(key, raising=False)
 
+        # Suppress any ``editor`` value present in the host's real config
+        monkeypatch.setattr(
+            files_module,
+            "_resolve_global_editor_command",
+            lambda: None,
+        )
+
         result = runner.invoke(app, ["config", "edit-user"])
 
         assert result.exit_code == 1
@@ -406,3 +430,22 @@ class TestConfigInitAndEditCommands:
         assert result.exit_code == 0
         assert system_path.is_file()
         assert captured["argv"][-1] == str(system_path)
+
+    def test_edit_user_uses_config_editor_when_env_unset(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The merged ``editor`` setting drives editor choice without env."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+        captured = self._stub_editor(
+            monkeypatch, config_editor="cfg-editor --wait"
+        )
+
+        # Drop the env editor introduced by ``_stub_editor`` to leave the
+        # config-supplied fallback as the only available editor source
+        monkeypatch.delenv("EDITOR", raising=False)
+
+        result = runner.invoke(app, ["config", "edit-user"])
+
+        assert result.exit_code == 0
+        assert captured["argv"][0] == "cfg-editor"
+        assert captured["argv"][-1] == str(user_path)

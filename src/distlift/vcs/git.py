@@ -18,7 +18,7 @@ log = get_logger(__name__)
 
 _LOG_FIELD_SEP = "\x1f"
 _LOG_RECORD_SEP = "\x1e"
-# ``git log`` separates records with ``\\x1e``; chunks may be joined by ``\\n``.
+# ``git log`` separates records with ``\\x1e``; parts may be joined by ``\\n``.
 # Avoid bare ``str.strip()`` because Python treats ``\\x1f`` as whitespace.
 _RECORD_CHUNK_STRIP_CHARS = "\r\n\t "
 

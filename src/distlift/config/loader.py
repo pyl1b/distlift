@@ -245,6 +245,11 @@ def load_environment_config(
     if v := _get("MANIFEST_PATH"):
         result["manifest_path"] = v
 
+    if v := _get("EDITOR"):
+        stripped = v.strip()
+        if stripped:
+            result["editor"] = stripped
+
     # Collect optional plugin-related environment overrides
     plugins: dict[str, Any] = {}
 
@@ -343,6 +348,14 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
     tag_template = release.get("tag_template")
     manifest_path = release.get("manifest_path")
 
+    # Optional editor fallback used when GIT_EDITOR/VISUAL/EDITOR are unset
+    raw_editor = release.get("editor")
+    if isinstance(raw_editor, str):
+        stripped_editor = raw_editor.strip()
+        editor = stripped_editor if stripped_editor else None
+    else:
+        editor = None
+
     # plugins section
     plugins_data = data.get("plugins", {})
     plugin_config = PluginConfig(
@@ -402,6 +415,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         tag_template=tag_template,
         version_source=version_source,
         manifest_path=manifest_path,
+        editor=editor,
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog_overlay=changelog_overlay,
