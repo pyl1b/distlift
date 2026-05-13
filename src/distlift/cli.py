@@ -128,6 +128,17 @@ def distlift_main_callback(
             ),
         ),
     ] = False,
+    all_changed: Annotated[
+        bool,
+        typer.Option(
+            "--all-changed/--all-packages",
+            help=(
+                "In monorepo mode, release only packages with commits since "
+                "their last tag (default). Use --all-packages to release "
+                "every configured package regardless of changes."
+            ),
+        ),
+    ] = True,
     build: Annotated[
         bool,
         typer.Option(
@@ -187,6 +198,9 @@ def distlift_main_callback(
         ctx: Typer invocation context (used to detect bare ``distlift`` runs).
         config_path: Optional extra TOML config path merged after defaults.
         dry_run: When ``True``, plan release without Git writes.
+        all_changed: When ``True`` (default), only release monorepo packages
+            with commits since their last tag.  Pass ``--all-packages`` to
+            release every configured package regardless of changes.
         build: When ``True``, build artifacts after a successful release.
         publish: When ``True``, build and publish after a successful release.
         no_changelog: When ``True``, skip changelog planning for this release.
@@ -231,6 +245,7 @@ def distlift_main_callback(
         dry_run=dry_run,
         build=build,
         publish=publish,
+        all_changed=all_changed,
         skip_changelog=no_changelog,
         skip_changelog_editor=no_changelog_editor,
         bump=flag_bump,

@@ -134,6 +134,7 @@ class DistliftApplication:
         dry_run: bool,
         build: bool,
         publish: bool,
+        all_changed: bool = True,
         skip_changelog: bool = False,
         skip_changelog_editor: bool = False,
         bump: BumpKind | None = None,
@@ -160,6 +161,9 @@ class DistliftApplication:
                 release.
             publish: When ``True``, build and upload after a successful
                 release.
+            all_changed: When ``True`` (default), only packages with commits
+                since their last tag are released in monorepo mode.  Set to
+                ``False`` to release every configured package.
             skip_changelog: When ``True``, skip changelog planning in this
                 run.
             skip_changelog_editor: When ``True``, skip interactive changelog
@@ -193,7 +197,7 @@ class DistliftApplication:
                 default_bump=eff_bump or BumpKind.PATCH,
                 explicit_version=eff_explicit,
                 selected_packages=[],
-                all_changed=True,
+                all_changed=all_changed,
                 dry_run=dry_run,
                 skip_changelog=skip_changelog,
                 skip_changelog_editor=skip_changelog_editor,
