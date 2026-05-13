@@ -146,9 +146,10 @@ class DistliftApplication:
         Otherwise ``explicit_version`` selects an exact next version, or
         ``bump`` selects the semver component to increment.
 
-        Simple mode targets one package. Monorepo mode uses the same selection
-        rules as ``distlift release monorepo`` without ``--all-changed`` or
-        ``--package`` (every managed package is included).
+        Simple mode targets one package. Monorepo mode uses change-detection
+        by default (same as ``distlift release monorepo --all-changed``).
+        Pass ``all_changed=False`` to release every configured package
+        regardless of commits.
 
         Args:
             repo_root: Repository root directory path.
@@ -192,7 +193,7 @@ class DistliftApplication:
                 default_bump=eff_bump or BumpKind.PATCH,
                 explicit_version=eff_explicit,
                 selected_packages=[],
-                all_changed=False,
+                all_changed=True,
                 dry_run=dry_run,
                 skip_changelog=skip_changelog,
                 skip_changelog_editor=skip_changelog_editor,
