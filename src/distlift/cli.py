@@ -79,6 +79,16 @@ def distlift_main_callback(
             help="Skip automatic changelog updates for this release.",
         ),
     ] = False,
+    no_changelog_editor: Annotated[
+        bool,
+        typer.Option(
+            "--no-changelog-editor",
+            help=(
+                "Do not open an editor on generated changelog entries before "
+                "writing."
+            ),
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[
         Path,
@@ -94,6 +104,8 @@ def distlift_main_callback(
         build: When ``True``, build artifacts after a successful release.
         publish: When ``True``, build and publish after a successful release.
         no_changelog: When ``True``, skip changelog planning for this release.
+        no_changelog_editor: When ``True``, skip interactive changelog editing
+            before writes.
         verbose: When ``True``, enable verbose logging for this process.
         repo_root: Filesystem path to the repository root directory.
     """
@@ -120,6 +132,7 @@ def distlift_main_callback(
         build=build,
         publish=publish,
         skip_changelog=no_changelog,
+        skip_changelog_editor=no_changelog_editor,
     )
 
     if not release_result.success:
@@ -271,6 +284,16 @@ def release_simple_command(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Plan only, do not execute")
     ] = False,
+    no_changelog_editor: Annotated[
+        bool,
+        typer.Option(
+            "--no-changelog-editor",
+            help=(
+                "Do not open an editor on generated changelog entries before "
+                "writing."
+            ),
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[
         Path, typer.Option("--repo-root", help="Repository root")
@@ -290,6 +313,7 @@ def release_simple_command(
         default_version: Optional fallback version when no prior tag exists.
         version_format: Optional version format string override.
         dry_run: When ``True``, plan the release without mutating Git state.
+        no_changelog_editor: When ``True``, skip interactive changelog editing.
         verbose: When ``True``, enable verbose logging.
         repo_root: Repository root directory path.
     """
@@ -334,6 +358,7 @@ def release_simple_command(
         bump=bump,
         explicit_version=version,
         dry_run=dry_run,
+        skip_changelog_editor=no_changelog_editor,
     )
 
     try:
@@ -370,6 +395,16 @@ def release_monorepo_command(
     config_path: Annotated[Path | None, typer.Option("--config")] = None,
     remote: Annotated[list[str] | None, typer.Option("--remote")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    no_changelog_editor: Annotated[
+        bool,
+        typer.Option(
+            "--no-changelog-editor",
+            help=(
+                "Do not open an editor on generated changelog entries before "
+                "writing."
+            ),
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
@@ -384,6 +419,7 @@ def release_monorepo_command(
         config_path: Optional extra TOML config path.
         remote: Optional Git remote names for push operations.
         dry_run: When ``True``, plan the release without mutating Git state.
+        no_changelog_editor: When ``True``, skip interactive changelog editing.
         verbose: When ``True``, enable verbose logging.
         repo_root: Repository root directory path.
     """
@@ -417,6 +453,7 @@ def release_monorepo_command(
         selected_packages=list(package) if package else [],
         all_changed=all_changed,
         dry_run=dry_run,
+        skip_changelog_editor=no_changelog_editor,
     )
 
     try:
@@ -460,6 +497,7 @@ def list_config_command(
     ch = config.changelog
     typer.echo(f"  changelog.enabled : {ch.enabled}")
     typer.echo(f"  changelog.path    : {ch.path}")
+    typer.echo(f"  changelog.prompt_editor : {ch.prompt_editor}")
     typer.echo(
         "  changelog.compare_url_template : %s"
         % (ch.compare_url_template or "(auto)")

@@ -104,6 +104,8 @@ class ChangelogConfig:
             lists.
         commit_mapping: Maps conventional type strings to section titles.
         default_section: Section title for non-conventional or unknown types.
+        prompt_editor: When True (default), open an editor on the generated
+            release entry fragment before writing during interactive releases.
     """
 
     enabled: bool = True
@@ -113,6 +115,7 @@ class ChangelogConfig:
     date_format: str = "%Y-%m-%d"
     include_unreleased_section: bool = True
     compare_url_template: str = ""
+    prompt_editor: bool = True
     skip_commit_types: list[str] = attrs.Factory(_default_changelog_skip_types)
     commit_mapping: dict[str, str] = attrs.Factory(
         _default_changelog_commit_mapping

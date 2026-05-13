@@ -120,10 +120,16 @@ def compute_simple_release_plan(
         target, resolved, request.config, request.dry_run
     )
 
-    return finalize_plan_with_changelog(
+    plan = finalize_plan_with_changelog(
         plan,
         git_repo=git,
         tags=tags,
         config=request.config,
         skip_changelog=request.skip_changelog,
+    )
+
+    return _attrs.evolve(
+        plan,
+        changelog_prompt_editor=request.config.changelog.prompt_editor,
+        skip_changelog_editor=request.skip_changelog_editor,
     )

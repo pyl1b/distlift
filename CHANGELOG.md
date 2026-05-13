@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- User hooks
+- Change-log editor.
+
+### Changed
+
+- Change-log file.
+
 ## [0.1.1] - 2026-05-13
 
 ### Changed
 
-- Initial commit
-- Publis on command without options
+- Publish on command without options
 - Fix misunderstanding
 - Add debug config, tasks
 - Add documentation

@@ -132,6 +132,51 @@ def _parse_release_block(block_lines: list[str]) -> ChangelogReleaseEntry:
     )
 
 
+def parse_release_entry_markdown(text: str) -> ChangelogReleaseEntry:
+    """Parse Markdown containing exactly one ``## [version]`` release block.
+
+    Args:
+        text: Fragment shown in an external editor, not a full changelog file.
+    """
+    # Normalize Windows newlines and strip BOM so heading detection is stable
+    raw = text.replace("\r\n", "\n").lstrip("\ufeff")
+    raw_stripped = raw.strip()
+
+    if not raw_stripped:
+        raise ChangelogError("Changelog release fragment is empty")
+
+    lines = raw_stripped.splitlines()
+    start_idx: int | None = None
+
+    for idx, line in enumerate(lines):
+        if line.startswith("## "):
+            start_idx = idx
+
+            break
+
+        if line.strip():
+            raise ChangelogError(
+                f"Unexpected text before release heading: {line!r}"
+            )
+
+    if start_idx is None:
+        raise ChangelogError(
+            "Changelog fragment must contain a ## [version] release heading"
+        )
+
+    tail = lines[start_idx + 1 :]
+
+    for line in tail:
+        if line.startswith("## "):
+            raise ChangelogError(
+                "Changelog fragment must contain exactly one ## release heading"
+            )
+
+    block_lines = lines[start_idx:]
+
+    return _parse_release_block(block_lines)
+
+
 def parse_changelog_document(text: str) -> ChangelogDocument:
     """Parse Keep-a-Changelog-style Markdown into a structured document.
 

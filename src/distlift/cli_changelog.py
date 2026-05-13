@@ -15,6 +15,7 @@ from distlift.changelog.builder import (
     render_inserted_entry_preview,
     scaffold_initial_changelog_document,
 )
+from distlift.changelog.editor_prompt import maybe_prompt_edit_changelog_entry
 from distlift.changelog.models import ChangelogUpdatePlan
 from distlift.changelog.writer import write_changelog_document
 from distlift.config.models import (
@@ -220,6 +221,13 @@ def changelog_update_command(
         str | None,
         typer.Option("--since", help="Lower-bound tag for commit scanning."),
     ] = None,
+    no_editor: Annotated[
+        bool,
+        typer.Option(
+            "--no-editor",
+            help="Skip opening an editor on the generated release entry.",
+        ),
+    ] = False,
     config_path: Annotated[Path | None, typer.Option("--config")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
@@ -234,6 +242,13 @@ def changelog_update_command(
         package=package,
         version=version,
         since=since,
+    )
+
+    plan = maybe_prompt_edit_changelog_entry(
+        plan,
+        changelog_prompt_editor=config.changelog.prompt_editor,
+        skip_changelog_editor=no_editor,
+        dry_run=False,
     )
 
     write_changelog_document(plan.path, plan.new_document)

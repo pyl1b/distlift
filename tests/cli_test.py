@@ -53,6 +53,7 @@ class TestCLI:
             build: bool,
             publish: bool,
             skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["repo_root"] = repo_root
@@ -60,6 +61,7 @@ class TestCLI:
             captured["build"] = build
             captured["publish"] = publish
             captured["skip_changelog"] = skip_changelog
+            captured["skip_changelog_editor"] = skip_changelog_editor
             return (
                 ReleaseResult(
                     success=True,
@@ -82,6 +84,7 @@ class TestCLI:
         assert captured.get("build") is False
         assert captured.get("publish") is False
         assert captured.get("skip_changelog") is False
+        assert captured.get("skip_changelog_editor") is False
         assert captured["repo_root"] == tmp_python_project.resolve()
         assert "v0.2.2" in result.output
 
@@ -99,10 +102,12 @@ class TestCLI:
             build: bool,
             publish: bool,
             skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["build"] = build
             captured["publish"] = publish
+            captured["skip_changelog_editor"] = skip_changelog_editor
             return (
                 ReleaseResult(
                     success=True,
@@ -128,6 +133,45 @@ class TestCLI:
         )
         assert captured["build"] is True
         assert captured["publish"] is True
+        assert captured.get("skip_changelog_editor") is False
+
+    def test_no_subcommand_forwards_no_changelog_editor(
+        self, tmp_python_project: Path, monkeypatch
+    ) -> None:
+        """``--no-changelog-editor`` reaches ``run_default_command``."""
+        captured: dict[str, bool] = {}
+
+        def fake_run_default_command(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            dry_run: bool,
+            build: bool,
+            publish: bool,
+            skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
+            registry: object | None = None,
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            captured["skip_changelog_editor"] = skip_changelog_editor
+            return ReleaseResult(
+                success=True, dry_run=dry_run, tag_names=[]
+            ), None
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
+        )
+        runner.invoke(
+            app,
+            [
+                "--repo-root",
+                str(tmp_python_project),
+                "--no-changelog-editor",
+            ],
+        )
+        assert captured["skip_changelog_editor"] is True
 
     def test_changelog_preview_runs(self, tmp_python_project: Path) -> None:
         """``distlift changelog preview`` prints a proposed release section."""

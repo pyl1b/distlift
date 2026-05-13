@@ -3,6 +3,7 @@ from __future__ import annotations
 import attrs
 
 from distlift.changelog.builder import render_inserted_entry_preview
+from distlift.changelog.editor_prompt import maybe_prompt_edit_changelog_entry
 from distlift.changelog.writer import write_changelog_document
 from distlift.config.models import Language, ResolvedConfig
 from distlift.errors import HookExecutionError
@@ -249,6 +250,13 @@ class ReleaseExecutor:
 
             if update_plan is None:
                 continue
+
+            update_plan = maybe_prompt_edit_changelog_entry(
+                update_plan,
+                changelog_prompt_editor=plan.changelog_prompt_editor,
+                skip_changelog_editor=plan.skip_changelog_editor,
+                dry_run=plan.dry_run,
+            )
 
             log.info("Writing changelog %s", update_plan.path)
             write_changelog_document(

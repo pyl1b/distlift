@@ -63,6 +63,9 @@ def changelog_from_merged_overlay(overlay: dict[str, Any]) -> ChangelogConfig:
     if "compare_url_template" in overlay:
         kw["compare_url_template"] = str(overlay["compare_url_template"])
 
+    if "prompt_editor" in overlay:
+        kw["prompt_editor"] = bool(overlay["prompt_editor"])
+
     if "skip_commit_types" in overlay:
         raw_skip = overlay["skip_commit_types"]
 

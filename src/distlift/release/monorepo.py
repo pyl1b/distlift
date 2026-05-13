@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import attrs
+
 from distlift.config.models import (
     Language,
     ManagedPackageConfig,
@@ -193,10 +195,16 @@ def compute_monorepo_release_plan(
         pkg_plans, request.config, request.repo_root, request.dry_run
     )
 
-    return finalize_plan_with_changelog(
+    plan = finalize_plan_with_changelog(
         plan,
         git_repo=git,
         tags=tags,
         config=request.config,
         skip_changelog=request.skip_changelog,
+    )
+
+    return attrs.evolve(
+        plan,
+        changelog_prompt_editor=request.config.changelog.prompt_editor,
+        skip_changelog_editor=request.skip_changelog_editor,
     )

@@ -46,6 +46,8 @@ class SimpleReleaseRequest:
         explicit_version: When set, this exact version string is used.
         dry_run: When True, planners mark the plan as non-executing.
         skip_changelog: When True, changelog mutations are not planned.
+        skip_changelog_editor: When True, do not open an editor on generated
+            changelog entries before writing (CLI override).
     """
 
     repo_root: Path
@@ -54,6 +56,7 @@ class SimpleReleaseRequest:
     explicit_version: str | None = None
     dry_run: bool = False
     skip_changelog: bool = False
+    skip_changelog_editor: bool = False
 
 
 @attrs.define
@@ -70,6 +73,8 @@ class MonorepoReleaseRequest:
             last tag; when False, use selection or all declared packages.
         dry_run: When True, planners mark the plan as non-executing.
         skip_changelog: When True, changelog mutations are not planned.
+        skip_changelog_editor: When True, do not open an editor on generated
+            changelog entries before writing (CLI override).
     """
 
     repo_root: Path
@@ -79,6 +84,7 @@ class MonorepoReleaseRequest:
     all_changed: bool = True
     dry_run: bool = False
     skip_changelog: bool = False
+    skip_changelog_editor: bool = False
 
 
 @attrs.define
@@ -111,6 +117,10 @@ class ReleasePlan:
         remotes: Remote names to push the commit and tags to.
         dry_run: When True the executor logs actions but does not write.
         repo_root: Absolute path to the root of the repository.
+        changelog_prompt_editor: Snapshot of ``changelog.prompt_editor`` when
+            the plan was built (whether interactive editing is desired).
+        skip_changelog_editor: When True, skip opening an editor regardless of
+            ``changelog_prompt_editor``.
 
     Properties:
         has_manifest_updates: True when any package requires a manifest
@@ -125,6 +135,8 @@ class ReleasePlan:
     remotes: list[str]
     dry_run: bool
     repo_root: Path
+    changelog_prompt_editor: bool = True
+    skip_changelog_editor: bool = False
 
     @property
     def has_manifest_updates(self) -> bool:

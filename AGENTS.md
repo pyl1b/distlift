@@ -37,6 +37,7 @@ src/distlift/
     builder.py         assemble changelog update plans from Git history and settings
     compare_url.py     derive compare URL templates from ``git remote`` URLs
     conventional.py    conventional-commit parsing for changelog routing
+    editor_prompt.py   optional external-editor session for release fragments
     formatter.py       render structured changelog models as Markdown
     git_log.py         collect commits between revisions for changelog builds
     models.py          changelog document structures and update plans
@@ -136,7 +137,15 @@ Key environment variables: `DISTLIFT_LANGUAGE`, `DISTLIFT_MODE`,
 `DISTLIFT_PLUGIN_PATHS`, `DISTLIFT_PLUGIN_DIRS`,
 `DISTLIFT_ENABLE_ENVIRONMENT_PLUGINS`, `DISTLIFT_ENABLE_BUILTIN_PLUGINS`,
 `DISTLIFT_CHANGELOG_ENABLED`, `DISTLIFT_CHANGELOG_PATH`,
-`DISTLIFT_CHANGELOG_COMPARE_URL_TEMPLATE`, `DISTLIFT_CHANGELOG_TITLE`.
+`DISTLIFT_CHANGELOG_COMPARE_URL_TEMPLATE`, `DISTLIFT_CHANGELOG_TITLE`,
+`DISTLIFT_CHANGELOG_PROMPT_EDITOR`.
+
+When `changelog.prompt_editor` is true (default), non–dry-run releases and
+`distlift changelog update` open `$GIT_EDITOR`, `$VISUAL`, or `$EDITOR` on the
+generated release fragment before writing. If `stdin` is not a TTY (typical CI),
+the generated entry is kept without prompting. Disable per run with
+`--no-changelog-editor` / `--no-editor`, or set `changelog.prompt_editor =
+false` / `DISTLIFT_CHANGELOG_PROMPT_EDITOR=false`.
 
 ---
 

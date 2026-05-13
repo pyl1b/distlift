@@ -40,6 +40,7 @@ _CHANGELOG_ALLOWED_KEYS = frozenset(
         "skip_commit_types",
         "commit_mapping",
         "default_section",
+        "prompt_editor",
     }
 )
 
@@ -275,6 +276,9 @@ def load_environment_config(
 
     if v := _get("CHANGELOG_TITLE"):
         changelog_env["title"] = v
+
+    if v := _get("CHANGELOG_PROMPT_EDITOR"):
+        changelog_env["prompt_editor"] = v.lower() in ("1", "true", "yes")
 
     if changelog_env:
         result["changelog"] = changelog_env

@@ -76,7 +76,7 @@ class TestMergeConfigLayers:
         )
 
         layer2 = RawConfig(
-            changelog_overlay={"enabled": False},
+            changelog_overlay={"enabled": False, "prompt_editor": False},
             source="b",
         )
 
@@ -84,3 +84,4 @@ class TestMergeConfigLayers:
 
         assert config.changelog.path == "A.md"
         assert config.changelog.enabled is False
+        assert config.changelog.prompt_editor is False

@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import attrs
+
 from distlift.changelog.compare_url import resolve_compare_url_template
 from distlift.changelog.conventional import parse_conventional_commit
 from distlift.changelog.formatter import render_release_entry
@@ -399,6 +401,65 @@ def build_changelog_update_plan(
         inserted_release=inserted_release,
         new_document=new_document,
         unreleased_placeholder=unreleased_placeholder,
+    )
+
+
+def validate_edited_release_version_label(
+    edited: ChangelogReleaseEntry,
+    expected_version_label: str,
+) -> None:
+    """Ensure the user did not rename the ``## [version]`` heading token.
+
+    Args:
+        edited: Parsed release entry produced from editor Markdown.
+        expected_version_label: Version bracket text from the release plan.
+    """
+    got = edited.version_label.strip()
+    exp = expected_version_label.strip()
+
+    if got != exp:
+        raise ChangelogError(
+            f"Edited changelog heading version {got!r} must match "
+            f"planned release {exp!r}"
+        )
+
+
+def apply_edited_release_to_plan(
+    plan: ChangelogUpdatePlan,
+    edited: ChangelogReleaseEntry,
+) -> ChangelogUpdatePlan:
+    """Swap the generated release entry inside the staged full document.
+
+    Args:
+        plan: Original mutation built from Git history.
+        edited: Replacement release parsed from user-edited Markdown.
+    """
+    releases = list(plan.new_document.releases)
+    target_link = plan.inserted_release.link_ref
+    target_ver = plan.inserted_release.version_label
+
+    match_idx: int | None = None
+
+    for idx, rel in enumerate(releases):
+        if rel.link_ref == target_link and rel.version_label == target_ver:
+            match_idx = idx
+
+            break
+
+    if match_idx is None:
+        raise ChangelogError(
+            f"Could not locate planned release [{target_ver}] in changelog "
+            "document"
+        )
+
+    releases[match_idx] = edited
+
+    new_document = attrs.evolve(plan.new_document, releases=releases)
+
+    return attrs.evolve(
+        plan,
+        inserted_release=edited,
+        new_document=new_document,
     )
 
 
