@@ -112,7 +112,9 @@ class PluginRegistry:
     def get_manifest_plugin(self, kind: str) -> ManifestPlugin:
         entry = self._manifest_plugins.get(kind)
         if entry is None:
-            raise PluginError(f"No manifest plugin registered for kind '{kind}'")
+            raise PluginError(
+                f"No manifest plugin registered for kind '{kind}'"
+            )
         return entry.plugin  # type: ignore[return-value]
 
     def get_publish_plugin(self, language: str) -> PublishPlugin | None:

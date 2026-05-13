@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from distlift.config.models import (
     Language,
@@ -28,7 +29,9 @@ def load_pyproject_tool_config(path: Path) -> dict[str, Any]:
     return data.get("tool", {}).get(PYPROJECT_TOOL_KEY, {})
 
 
-def load_environment_config(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+def load_environment_config(
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     """Build a raw config dict from environment variables with the DISTLIFT_ prefix."""
     if env is None:
         env = os.environ
@@ -108,14 +111,18 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
             ManagedPackageConfig(
                 name=pkg["name"],
                 path=pkg["path"],
-                language=Language(pkg["language"]) if "language" in pkg else None,
+                language=Language(pkg["language"])
+                if "language" in pkg
+                else None,
                 manifest_path=pkg.get("manifest_path"),
                 version_format=VersionFormat(
                     pkg.get("version_format", "major-minor-patch")
                 ),
                 default_version=pkg.get("default_version", "0.1.0"),
                 tag_template=pkg.get("tag_template"),
-                version_source=VersionSource(pkg.get("version_source", "manifest")),
+                version_source=VersionSource(
+                    pkg.get("version_source", "manifest")
+                ),
             )
         )
     monorepo_config = MonorepoConfig(
@@ -169,7 +176,9 @@ def load_config_layers(
         pyproject = discover_embedded_pyproject_config(repo_root)
         if pyproject:
             data = load_pyproject_tool_config(pyproject)
-            layers.append(_parse_raw_config(data, str(pyproject) + "[tool.distlift]"))
+            layers.append(
+                _parse_raw_config(data, str(pyproject) + "[tool.distlift]")
+            )
 
         for path in discover_local_config_paths(repo_root):
             data = load_toml_config(path)

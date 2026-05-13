@@ -1,8 +1,6 @@
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from distlift.app import DistliftApplication
 from distlift.config.models import (
     BumpKind,
@@ -60,7 +58,10 @@ class TestSimpleReleasePlan:
     def test_dirty_worktree_fails(self, tmp_python_project: Path):
         (tmp_python_project / "dirty.txt").write_text("x")
         subprocess.run(
-            ["git", "add", "."], cwd=tmp_python_project, check=True, capture_output=True
+            ["git", "add", "."],
+            cwd=tmp_python_project,
+            check=True,
+            capture_output=True,
         )
         config = _make_config()
         app = DistliftApplication()

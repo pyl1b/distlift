@@ -9,7 +9,9 @@ import pytest
 @pytest.fixture
 def tmp_git_repo(tmp_path: Path) -> Path:
     """Create a minimal Git repository in a temporary directory."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", str(tmp_path)], check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "config", "user.email", "test@example.com"],
         cwd=tmp_path,
@@ -24,7 +26,9 @@ def tmp_git_repo(tmp_path: Path) -> Path:
     )
     # Make an initial commit so HEAD exists
     (tmp_path / "README.md").write_text("test\n")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "."], cwd=tmp_path, check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
         cwd=tmp_path,

@@ -9,7 +9,6 @@ from distlift.config.models import (
     ReleaseMode,
     ResolvedConfig,
     VersionFormat,
-    VersionSource,
 )
 from distlift.errors import ConfigurationError
 from distlift.monorepo.discovery import (

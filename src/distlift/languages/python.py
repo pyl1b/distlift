@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from distlift.config.models import Language, ResolvedConfig, VersionSource
+
+if TYPE_CHECKING:
+    from distlift.release.models import ReleaseTarget
 from distlift.errors import ManifestUpdateError
 from distlift.languages.base import ProjectAdapter
 from distlift.manifests.pyproject_file import (
@@ -21,8 +25,10 @@ class PythonProjectAdapter(ProjectAdapter):
 
     def load_release_target(
         self, root: Path, config: ResolvedConfig
-    ) -> "ReleaseTarget":
-        from distlift.release.models import ReleaseTarget
+    ) -> ReleaseTarget:
+        from distlift.release.models import (
+            ReleaseTarget,  # avoid circular at runtime
+        )
 
         manifest = config.manifest_path or (root / "pyproject.toml")
         return ReleaseTarget(
@@ -32,7 +38,7 @@ class PythonProjectAdapter(ProjectAdapter):
             version_source=config.version_source,
         )
 
-    def is_dynamic_version(self, target: "ReleaseTarget") -> bool:
+    def is_dynamic_version(self, target: ReleaseTarget) -> bool:
         if target.version_source == VersionSource.TAG:
             return True
         try:
@@ -41,14 +47,16 @@ class PythonProjectAdapter(ProjectAdapter):
         except ManifestUpdateError:
             return False
 
-    def read_manifest_version(self, target: "ReleaseTarget") -> str | None:
+    def read_manifest_version(self, target: ReleaseTarget) -> str | None:
         try:
             data = read_pyproject(target.manifest_path)
             return get_project_version(data)
         except ManifestUpdateError:
             return None
 
-    def update_manifest_version(self, target: "ReleaseTarget", version: str) -> None:
+    def update_manifest_version(
+        self, target: ReleaseTarget, version: str
+    ) -> None:
         set_project_version(target.manifest_path, version)
 
 

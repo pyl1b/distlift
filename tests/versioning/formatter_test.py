@@ -5,7 +5,10 @@ from distlift.versioning.models import VersionParts
 
 class TestFormatVersion:
     def test_major(self):
-        assert format_version(VersionParts(major=3, fmt=VersionFormat.MAJOR)) == "3"
+        assert (
+            format_version(VersionParts(major=3, fmt=VersionFormat.MAJOR))
+            == "3"
+        )
 
     def test_major_minor(self):
         assert (
@@ -16,7 +19,9 @@ class TestFormatVersion:
         )
 
     def test_full(self):
-        assert format_version(VersionParts(major=1, minor=2, patch=3)) == "1.2.3"
+        assert (
+            format_version(VersionParts(major=1, minor=2, patch=3)) == "1.2.3"
+        )
 
 
 class TestFormatTag:
@@ -25,7 +30,8 @@ class TestFormatTag:
 
     def test_monorepo_template(self):
         assert (
-            format_tag("1.2.3", "v{version}-{package}", "corelib") == "v1.2.3-corelib"
+            format_tag("1.2.3", "v{version}-{package}", "corelib")
+            == "v1.2.3-corelib"
         )
 
     def test_template_without_package(self):

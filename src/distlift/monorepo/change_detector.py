@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from distlift.config.models import ManagedPackageConfig, VersionFormat
-from distlift.errors import VersionError
+from distlift.config.models import ManagedPackageConfig
 from distlift.logging_utils import get_logger
 from distlift.vcs.git import GitRepository
 from distlift.vcs.tags import find_latest_tag_for_package
@@ -34,7 +33,10 @@ def package_has_changes_since_tag(
         changed = git.get_changed_files(revspec=f"{tag}..HEAD")
     except Exception as exc:
         log.warning(
-            "Could not detect changes for %s since %s: %s", package.name, tag, exc
+            "Could not detect changes for %s since %s: %s",
+            package.name,
+            tag,
+            exc,
         )
         return True
 

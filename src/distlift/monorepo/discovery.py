@@ -6,7 +6,9 @@ from distlift.config.models import ManagedPackageConfig, ResolvedConfig
 from distlift.errors import ConfigurationError
 
 
-def load_managed_packages(config: ResolvedConfig) -> list[ManagedPackageConfig]:
+def load_managed_packages(
+    config: ResolvedConfig,
+) -> list[ManagedPackageConfig]:
     """Return the list of managed packages from config, validating each."""
     packages = config.monorepo.packages
     if not packages:

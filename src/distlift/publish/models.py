@@ -24,3 +24,19 @@ class PublishResult:
     success: bool
     artifacts: list[BuildArtifact] = attrs.Factory(list)
     error: str | None = None
+
+
+@attrs.define
+class PublishRunResult:
+    """Outcome of publishing one or more local projects.
+
+    Attributes:
+        success: True when every targeted project published successfully.
+        projects: Pairs of a display label (e.g. package name) and publish
+            result per project root.
+        error: Set when publishing could not start (configuration or detection).
+    """
+
+    success: bool
+    projects: list[tuple[str, PublishResult]] = attrs.Factory(list)
+    error: str | None = None

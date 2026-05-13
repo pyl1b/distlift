@@ -21,19 +21,25 @@ def _config(**kwargs) -> ResolvedConfig:
 
 class TestJavaScriptProjectAdapter:
     def test_detects_package_json(self, tmp_path: Path):
-        (tmp_path / "package.json").write_text('{"name":"x","version":"1.0.0"}')
+        (tmp_path / "package.json").write_text(
+            '{"name":"x","version":"1.0.0"}'
+        )
         adapter = JavaScriptProjectAdapter()
         assert adapter.detect_project(tmp_path)
 
     def test_read_manifest_version(self, tmp_path: Path):
-        (tmp_path / "package.json").write_text('{"name":"x","version":"2.3.4"}')
+        (tmp_path / "package.json").write_text(
+            '{"name":"x","version":"2.3.4"}'
+        )
         config = _config()
         adapter = JavaScriptProjectAdapter()
         target = adapter.load_release_target(tmp_path, config)
         assert adapter.read_manifest_version(target) == "2.3.4"
 
     def test_update_manifest_version(self, tmp_path: Path):
-        (tmp_path / "package.json").write_text('{"name":"x","version":"1.0.0"}')
+        (tmp_path / "package.json").write_text(
+            '{"name":"x","version":"1.0.0"}'
+        )
         config = _config()
         adapter = JavaScriptProjectAdapter()
         target = adapter.load_release_target(tmp_path, config)

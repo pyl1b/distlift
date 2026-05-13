@@ -59,9 +59,13 @@ def parse_tag_version(
     return parse_version(version_text, fmt)
 
 
-def _extract_version_from_tag(tag: str, template: str, package_name: str | None) -> str:
+def _extract_version_from_tag(
+    tag: str, template: str, package_name: str | None
+) -> str:
     pattern = re.escape(template)
-    pattern = pattern.replace(r"\{version\}", r"(?P<version>[^\-]+(?:\.[^\-]+)*)")
+    pattern = pattern.replace(
+        r"\{version\}", r"(?P<version>[^\-]+(?:\.[^\-]+)*)"
+    )
     if package_name:
         pattern = pattern.replace(r"\{package\}", re.escape(package_name))
     else:

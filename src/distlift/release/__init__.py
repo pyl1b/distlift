@@ -1,10 +1,10 @@
 from distlift.release.models import (
+    MonorepoReleaseRequest,
     PackageReleasePlan,
     ReleasePlan,
     ReleaseResult,
     ReleaseTarget,
     SimpleReleaseRequest,
-    MonorepoReleaseRequest,
 )
 
 __all__ = [

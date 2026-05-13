@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from distlift.config.models import Language, ManagedPackageConfig, ResolvedConfig
+from distlift.config.models import (
+    Language,
+    ManagedPackageConfig,
+    ResolvedConfig,
+)
 from distlift.errors import UnsupportedLanguageError
 from distlift.languages.base import ProjectAdapter
 from distlift.monorepo.change_detector import (
     find_changed_packages,
-    find_package_last_tag,
 )
 from distlift.monorepo.discovery import (
     load_managed_packages,
@@ -22,22 +25,32 @@ from distlift.release.models import (
 )
 from distlift.release.planner import plan_monorepo_release
 from distlift.vcs.git import GitRepository
-from distlift.versioning.resolver import resolve_current_version, resolve_next_version
+from distlift.versioning.resolver import (
+    resolve_current_version,
+    resolve_next_version,
+)
 
 
-def _adapter_for(registry: PluginRegistry, language: Language) -> ProjectAdapter:
+def _adapter_for(
+    registry: PluginRegistry, language: Language
+) -> ProjectAdapter:
     from distlift.languages.javascript import (
         JavaScriptProjectAdapter,
         JavaScriptProjectPlugin,
     )
-    from distlift.languages.python import PythonProjectAdapter, PythonProjectPlugin
+    from distlift.languages.python import (
+        PythonProjectAdapter,
+        PythonProjectPlugin,
+    )
 
     plugin = registry.get_language_plugin(language.value)
     if isinstance(plugin, PythonProjectPlugin):
         return PythonProjectAdapter()
     if isinstance(plugin, JavaScriptProjectPlugin):
         return JavaScriptProjectAdapter()
-    raise UnsupportedLanguageError(f"No adapter for plugin: {plugin.get_name()}")
+    raise UnsupportedLanguageError(
+        f"No adapter for plugin: {plugin.get_name()}"
+    )
 
 
 def discover_managed_targets(
@@ -86,7 +99,9 @@ def select_changed_targets(
 
     changed_names = {p.name for p in changed_pkgs}
     return [
-        (pkg, tgt) for pkg, tgt in zip(packages, targets) if pkg.name in changed_names
+        (pkg, tgt)
+        for pkg, tgt in zip(packages, targets)
+        if pkg.name in changed_names
     ]
 
 

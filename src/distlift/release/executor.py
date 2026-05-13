@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import attrs
 
-from distlift.config.models import Language, VersionSource
+from distlift.config.models import Language
 from distlift.languages.base import ProjectAdapter
 from distlift.logging_utils import get_logger
 from distlift.plugins.registry import PluginRegistry
@@ -13,12 +13,17 @@ from distlift.vcs.git import GitRepository
 log = get_logger(__name__)
 
 
-def _get_adapter(registry: PluginRegistry, language: Language) -> ProjectAdapter:
+def _get_adapter(
+    registry: PluginRegistry, language: Language
+) -> ProjectAdapter:
     from distlift.languages.javascript import (
-        JavaScriptProjectPlugin,
         JavaScriptProjectAdapter,
+        JavaScriptProjectPlugin,
     )
-    from distlift.languages.python import PythonProjectPlugin, PythonProjectAdapter
+    from distlift.languages.python import (
+        PythonProjectAdapter,
+        PythonProjectPlugin,
+    )
 
     plugin = registry.get_language_plugin(language.value)
     if isinstance(plugin, PythonProjectPlugin):
@@ -27,7 +32,9 @@ def _get_adapter(registry: PluginRegistry, language: Language) -> ProjectAdapter
         return JavaScriptProjectAdapter()
     from distlift.errors import UnsupportedLanguageError
 
-    raise UnsupportedLanguageError(f"No adapter for plugin: {plugin.get_name()}")
+    raise UnsupportedLanguageError(
+        f"No adapter for plugin: {plugin.get_name()}"
+    )
 
 
 @attrs.define
@@ -91,7 +98,9 @@ class ReleaseExecutor:
             log.info("Creating tag %s", tag_name)
             git.create_tag(tag_name, message=message)
 
-    def _push_release(self, plan: ReleasePlan, git: GitRepository) -> list[str]:
+    def _push_release(
+        self, plan: ReleasePlan, git: GitRepository
+    ) -> list[str]:
         branch = git.get_current_branch()
         pushed = []
         for remote in plan.remotes:

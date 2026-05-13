@@ -1,21 +1,26 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
+import attrs
 import typer
 
 from distlift.app import DistliftApplication
-from distlift.config.models import BumpKind, Language, ReleaseMode
+from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
 from distlift.logging_utils import configure_logging
-from distlift.release.models import MonorepoReleaseRequest, SimpleReleaseRequest
+from distlift.release.models import (
+    MonorepoReleaseRequest,
+    SimpleReleaseRequest,
+)
 
 app = typer.Typer(
     name="distlift",
-    help="Release orchestrator for Python and JavaScript packages.",
-    no_args_is_help=True,
+    help=(
+        "Release orchestrator for Python and JavaScript packages. "
+        "With no subcommand, builds and publishes the current project."
+    ),
 )
 release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
 config_app = typer.Typer(help="Configuration commands.", no_args_is_help=True)
@@ -26,20 +31,85 @@ app.add_typer(config_app, name="config")
 app.add_typer(plugins_app, name="plugins")
 
 
+@app.callback(invoke_without_command=True)
+def distlift_main_callback(
+    ctx: typer.Context,
+    config_path: Annotated[
+        Path | None,
+        typer.Option("--config", help="Extra config file"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Skip registry upload (per-language); may still build artifacts."
+            ),
+        ),
+    ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
+    repo_root: Annotated[
+        Path,
+        typer.Option("--repo-root", help="Repository root"),
+    ] = Path("."),
+) -> None:
+    """Distlift CLI entry; no subcommand runs build and publish."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    configure_logging(verbose)
+    application = DistliftApplication()
+    extra = [config_path] if config_path else None
+    root = repo_root.resolve()
+    config = application.load_effective_config(root, extra)
+
+    try:
+        validate_resolved_config(config)
+    except Exception as exc:
+        typer.echo(f"Configuration error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    result = application.run_publish(root, config, dry_run=dry_run)
+
+    if result.error:
+        typer.echo(f"Publish failed: {result.error}", err=True)
+        raise typer.Exit(1)
+
+    prefix = "[dry-run] " if dry_run else ""
+
+    # One line per project (simple repo or each monorepo package)
+    for label, pr in result.projects:
+        if pr.success:
+            names = ", ".join(a.path.name for a in pr.artifacts)
+            if names:
+                typer.echo(f"{prefix}{label}: published {names}")
+            else:
+                typer.echo(f"{prefix}{label}: ok")
+        else:
+            typer.echo(
+                "{}: {}".format(
+                    label,
+                    pr.error or "publish failed",
+                ),
+                err=True,
+            )
+
+    if not result.success:
+        raise typer.Exit(1)
+
+
 def _resolve_app_config(
     repo_root: Path,
-    config_path: Optional[Path],
-    language: Optional[str],
-    remote: Optional[list[str]],
-    default_version: Optional[str],
-    version_format: Optional[str],
+    config_path: Path | None,
+    language: str | None,
+    remote: list[str] | None,
+    default_version: str | None,
+    version_format: str | None,
     dry_run: bool,
     verbose: bool,
-) -> tuple[DistliftApplication, "ResolvedConfig"]:
-    from distlift.config.merger import merge_config_layers
-    from distlift.config.loader import load_config_layers
-    from distlift.config.models import Language as Lang, VersionFormat, ResolvedConfig
-    import attrs
+) -> tuple[DistliftApplication, ResolvedConfig]:
+    from distlift.config.models import Language as Lang
+    from distlift.config.models import VersionFormat
 
     configure_logging(verbose)
 
@@ -65,7 +135,9 @@ def _resolve_app_config(
         try:
             fmt = VersionFormat(version_format)
         except ValueError:
-            typer.echo(f"Unsupported version format: {version_format}", err=True)
+            typer.echo(
+                f"Unsupported version format: {version_format}", err=True
+            )
             raise typer.Exit(1)
         config = attrs.evolve(config, version_format=fmt)
 
@@ -75,23 +147,36 @@ def _resolve_app_config(
 @release_app.command("simple")
 def release_simple_command(
     language: Annotated[
-        Optional[str],
-        typer.Option("--language", "-l", help="Target language (python, javascript)"),
+        str | None,
+        typer.Option(
+            "--language", "-l", help="Target language (python, javascript)"
+        ),
     ] = None,
-    major: Annotated[bool, typer.Option("--major", help="Bump major version")] = False,
-    minor: Annotated[bool, typer.Option("--minor", help="Bump minor version")] = False,
-    patch: Annotated[bool, typer.Option("--patch", help="Bump patch version")] = False,
+    major: Annotated[
+        bool, typer.Option("--major", help="Bump major version")
+    ] = False,
+    minor: Annotated[
+        bool, typer.Option("--minor", help="Bump minor version")
+    ] = False,
+    patch: Annotated[
+        bool, typer.Option("--patch", help="Bump patch version")
+    ] = False,
     version: Annotated[
-        Optional[str], typer.Option("--version", "-v", help="Set explicit version")
+        str | None,
+        typer.Option("--version", "-v", help="Set explicit version"),
     ] = None,
     config_path: Annotated[
-        Optional[Path], typer.Option("--config", help="Extra config file")
+        Path | None, typer.Option("--config", help="Extra config file")
     ] = None,
     remote: Annotated[
-        Optional[list[str]], typer.Option("--remote", help="Push remote(s)")
+        list[str] | None, typer.Option("--remote", help="Push remote(s)")
     ] = None,
-    default_version: Annotated[Optional[str], typer.Option("--default-version")] = None,
-    version_format: Annotated[Optional[str], typer.Option("--version-format")] = None,
+    default_version: Annotated[
+        str | None, typer.Option("--default-version")
+    ] = None,
+    version_format: Annotated[
+        str | None, typer.Option("--version-format")
+    ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Plan only, do not execute")
     ] = False,
@@ -103,7 +188,9 @@ def release_simple_command(
     """Run a simple (single-package) release."""
     selectors = sum([major, minor, patch, version is not None])
     if selectors == 0:
-        typer.echo("Provide one of --major, --minor, --patch, or --version.", err=True)
+        typer.echo(
+            "Provide one of --major, --minor, --patch, or --version.", err=True
+        )
         raise typer.Exit(1)
     if selectors > 1:
         typer.echo("Provide exactly one version selector.", err=True)
@@ -163,17 +250,18 @@ def release_simple_command(
 @release_app.command("monorepo")
 def release_monorepo_command(
     all_changed: Annotated[
-        bool, typer.Option("--all-changed", help="Release all changed packages")
+        bool,
+        typer.Option("--all-changed", help="Release all changed packages"),
     ] = False,
     package: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--package", "-p", help="Specific package name(s)"),
     ] = None,
     default_bump: Annotated[
         str, typer.Option("--default-bump", help="Default bump kind")
     ] = "patch",
-    config_path: Annotated[Optional[Path], typer.Option("--config")] = None,
-    remote: Annotated[Optional[list[str]], typer.Option("--remote")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
+    remote: Annotated[list[str] | None, typer.Option("--remote")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
@@ -186,7 +274,14 @@ def release_monorepo_command(
         raise typer.Exit(1)
 
     application, config = _resolve_app_config(
-        repo_root.resolve(), config_path, None, remote, None, None, dry_run, verbose
+        repo_root.resolve(),
+        config_path,
+        None,
+        remote,
+        None,
+        None,
+        dry_run,
+        verbose,
     )
 
     try:
@@ -220,7 +315,7 @@ def release_monorepo_command(
 
 @config_app.command("show")
 def list_config_command(
-    config_path: Annotated[Optional[Path], typer.Option("--config")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
     """Show the resolved configuration and the source of each field."""
@@ -246,7 +341,7 @@ def list_config_command(
 
 @config_app.command("validate")
 def validate_config_command(
-    config_path: Annotated[Optional[Path], typer.Option("--config")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
     """Validate the resolved configuration."""
@@ -263,7 +358,7 @@ def validate_config_command(
 
 @plugins_app.command("list")
 def list_plugins_command(
-    config_path: Annotated[Optional[Path], typer.Option("--config")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
 ) -> None:
@@ -282,6 +377,10 @@ def list_plugins_command(
     typer.echo("Loaded plugins:")
     for entry in entries:
         plugin = entry.plugin
-        name = plugin.get_name() if hasattr(plugin, "get_name") else repr(plugin)  # type: ignore[union-attr]
-        override_info = f" (overrides: {entry.overrides})" if entry.overrides else ""
+        name = (
+            plugin.get_name() if hasattr(plugin, "get_name") else repr(plugin)
+        )  # type: ignore[union-attr]
+        override_info = (
+            f" (overrides: {entry.overrides})" if entry.overrides else ""
+        )
         typer.echo(f"  {name} [{entry.source}]{override_info}")

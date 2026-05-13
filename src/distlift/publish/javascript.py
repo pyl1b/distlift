@@ -4,7 +4,11 @@ import subprocess
 from pathlib import Path
 
 from distlift.errors import PublishError
-from distlift.publish.models import BuildArtifact, PublishRequest, PublishResult
+from distlift.publish.models import (
+    BuildArtifact,
+    PublishRequest,
+    PublishResult,
+)
 
 
 def build_javascript_distributions(
@@ -17,12 +21,19 @@ def build_javascript_distributions(
     elif package_manager == "pnpm":
         cmd = ["pnpm", "pack", "--out-dir", str(project_root / "dist")]
     elif package_manager == "yarn":
-        cmd = ["yarn", "pack", "--out", str(project_root / "dist" / "package.tgz")]
+        cmd = [
+            "yarn",
+            "pack",
+            "--out",
+            str(project_root / "dist" / "package.tgz"),
+        ]
     else:
         raise PublishError(f"Unsupported package manager: {package_manager}")
 
     (project_root / "dist").mkdir(exist_ok=True)
-    result = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, cwd=project_root, capture_output=True, text=True
+    )
     if result.returncode != 0:
         raise PublishError(f"Pack failed:\n{result.stderr}")
 
@@ -50,7 +61,8 @@ def publish_javascript_distributions(
             cmd = ["yarn", "publish", str(artifact.path)]
         else:
             return PublishResult(
-                success=False, error=f"Unsupported package manager: {package_manager}"
+                success=False,
+                error=f"Unsupported package manager: {package_manager}",
             )
         cmd += request.extra_args
         result = subprocess.run(cmd, capture_output=True, text=True)

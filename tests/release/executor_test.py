@@ -1,11 +1,19 @@
 from pathlib import Path
 
-from distlift.config.models import Language, ReleaseMode, VersionSource
-from distlift.release.executor import ReleaseExecutor
-from distlift.release.models import PackageReleasePlan, ReleasePlan, ReleaseTarget
-from distlift.versioning.models import ResolvedVersion, VersionParts
-from distlift.config.models import VersionFormat, BumpKind
+from distlift.config.models import (
+    BumpKind,
+    Language,
+    ReleaseMode,
+    VersionSource,
+)
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
+from distlift.release.executor import ReleaseExecutor
+from distlift.release.models import (
+    PackageReleasePlan,
+    ReleasePlan,
+    ReleaseTarget,
+)
+from distlift.versioning.models import ResolvedVersion, VersionParts
 
 
 def _make_registry():

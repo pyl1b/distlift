@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from distlift.publish.models import BuildArtifact, PublishRequest
 from distlift.publish.javascript import publish_javascript_distributions
+from distlift.publish.models import BuildArtifact, PublishRequest
 
 
 class TestPublishJavaScriptDryRun:

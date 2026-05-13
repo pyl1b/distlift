@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from distlift.config.models import Language, ResolvedConfig, VersionSource
+
+if TYPE_CHECKING:
+    from distlift.release.models import ReleaseTarget
 from distlift.errors import ManifestUpdateError
 from distlift.languages.base import ProjectAdapter
 from distlift.manifests.package_json_file import (
@@ -20,7 +24,7 @@ class JavaScriptProjectAdapter(ProjectAdapter):
 
     def load_release_target(
         self, root: Path, config: ResolvedConfig
-    ) -> "ReleaseTarget":
+    ) -> ReleaseTarget:
         from distlift.release.models import ReleaseTarget
 
         manifest = config.manifest_path or (root / "package.json")
@@ -31,17 +35,19 @@ class JavaScriptProjectAdapter(ProjectAdapter):
             version_source=config.version_source,
         )
 
-    def is_dynamic_version(self, target: "ReleaseTarget") -> bool:
+    def is_dynamic_version(self, target: ReleaseTarget) -> bool:
         return target.version_source == VersionSource.TAG
 
-    def read_manifest_version(self, target: "ReleaseTarget") -> str | None:
+    def read_manifest_version(self, target: ReleaseTarget) -> str | None:
         try:
             data = read_package_json(target.manifest_path)
             return get_package_version(data)
         except ManifestUpdateError:
             return None
 
-    def update_manifest_version(self, target: "ReleaseTarget", version: str) -> None:
+    def update_manifest_version(
+        self, target: ReleaseTarget, version: str
+    ) -> None:
         set_package_version(target.manifest_path, version)
 
 

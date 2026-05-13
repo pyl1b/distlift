@@ -25,7 +25,9 @@ class TestBumpVersion:
 
 class TestValidateBumpAllowed:
     def test_major_format_allows_major(self):
-        validate_bump_allowed(VersionFormat.MAJOR, BumpKind.MAJOR)  # no exception
+        validate_bump_allowed(
+            VersionFormat.MAJOR, BumpKind.MAJOR
+        )  # no exception
 
     def test_major_format_rejects_minor(self):
         with pytest.raises(VersionError):

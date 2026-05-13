@@ -4,7 +4,11 @@ import subprocess
 from pathlib import Path
 
 from distlift.errors import PublishError
-from distlift.publish.models import BuildArtifact, PublishRequest, PublishResult
+from distlift.publish.models import (
+    BuildArtifact,
+    PublishRequest,
+    PublishResult,
+)
 
 
 def build_python_distributions(
@@ -15,7 +19,9 @@ def build_python_distributions(
     cmd = ["python", "-m", "build"]
     if outdir:
         cmd += ["--outdir", str(outdir)]
-    result = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, cwd=project_root, capture_output=True, text=True
+    )
     if result.returncode != 0:
         raise PublishError(f"Build failed:\n{result.stderr}")
 

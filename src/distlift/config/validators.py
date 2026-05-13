@@ -4,7 +4,6 @@ import re
 
 from distlift.config.models import (
     BumpKind,
-    Language,
     ReleaseMode,
     ResolvedConfig,
     VersionFormat,
@@ -38,7 +37,9 @@ def validate_monorepo_config(config: ResolvedConfig) -> None:
         )
     names = [p.name for p in config.monorepo.packages]
     if len(names) != len(set(names)):
-        raise ConfigurationError("Duplicate package names in monorepo configuration")
+        raise ConfigurationError(
+            "Duplicate package names in monorepo configuration"
+        )
     for pkg in config.monorepo.packages:
         if not pkg.path:
             raise ConfigurationError(

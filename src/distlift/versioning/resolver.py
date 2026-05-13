@@ -64,7 +64,9 @@ def resolve_next_version(
 
     if explicit is not None:
         next_parts = parse_version(explicit, fmt)
-        tag_name = format_tag(format_version(next_parts), template, package_name)
+        tag_name = format_tag(
+            format_version(next_parts), template, package_name
+        )
         return ResolvedVersion(
             current=current,
             next=next_parts,

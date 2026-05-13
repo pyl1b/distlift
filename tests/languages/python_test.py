@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from distlift.config.models import Language, ResolvedConfig, VersionSource
+from distlift.config.models import ResolvedConfig, VersionSource
 from distlift.languages.python import PythonProjectAdapter
-from distlift.release.models import ReleaseTarget
 
 
 def _config(**kwargs) -> ResolvedConfig:

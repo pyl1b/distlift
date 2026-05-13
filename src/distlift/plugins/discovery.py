@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import attrs
 
@@ -39,7 +39,9 @@ def discover_entry_point_plugins() -> list[DiscoveredPlugin]:
     return results
 
 
-def discover_plugins_from_paths(paths: Sequence[Path]) -> list[DiscoveredPlugin]:
+def discover_plugins_from_paths(
+    paths: Sequence[Path],
+) -> list[DiscoveredPlugin]:
     """Return plugin candidates for explicitly supplied file or package paths."""
     results: list[DiscoveredPlugin] = []
     for path in paths:
@@ -53,7 +55,9 @@ def discover_plugins_from_paths(paths: Sequence[Path]) -> list[DiscoveredPlugin]
                 DiscoveredPlugin(name=path.name, source=str(path), path=path)
             )
         else:
-            log.warning("Plugin path is not a .py file or Python package: %s", path)
+            log.warning(
+                "Plugin path is not a .py file or Python package: %s", path
+            )
     return results
 
 
@@ -66,7 +70,11 @@ def discover_plugins_from_directory(path: Path) -> list[DiscoveredPlugin]:
 
     results: list[DiscoveredPlugin] = []
     for item in sorted(path.iterdir()):
-        if item.is_file() and item.suffix == ".py" and not item.name.startswith("_"):
+        if (
+            item.is_file()
+            and item.suffix == ".py"
+            and not item.name.startswith("_")
+        ):
             results.append(
                 DiscoveredPlugin(name=item.stem, source=str(item), path=item)
             )

@@ -27,7 +27,10 @@ class TestFindLatestTagForPackage:
     def test_finds_highest(self):
         tags = ["v1.0.0-corelib", "v2.0.0-corelib", "v1.5.0-otherlib"]
         result = find_latest_tag_for_package(
-            tags, "v{version}-{package}", VersionFormat.MAJOR_MINOR_PATCH, "corelib"
+            tags,
+            "v{version}-{package}",
+            VersionFormat.MAJOR_MINOR_PATCH,
+            "corelib",
         )
         assert result == "v2.0.0-corelib"
 

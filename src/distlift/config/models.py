@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 import attrs
@@ -12,29 +12,29 @@ from distlift.constants import (
 )
 
 
-class Language(str, Enum):
+class Language(StrEnum):
     PYTHON = "python"
     JAVASCRIPT = "javascript"
 
 
-class ReleaseMode(str, Enum):
+class ReleaseMode(StrEnum):
     SIMPLE = "simple"
     MONOREPO = "monorepo"
 
 
-class VersionFormat(str, Enum):
+class VersionFormat(StrEnum):
     MAJOR = "major"
     MAJOR_MINOR = "major-minor"
     MAJOR_MINOR_PATCH = "major-minor-patch"
 
 
-class BumpKind(str, Enum):
+class BumpKind(StrEnum):
     MAJOR = "major"
     MINOR = "minor"
     PATCH = "patch"
 
 
-class VersionSource(str, Enum):
+class VersionSource(StrEnum):
     MANIFEST = "manifest"
     TAG = "tag"
 

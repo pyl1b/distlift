@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence, TypeVar
+from collections.abc import Sequence
+from typing import TypeVar
 
 import attrs
 
@@ -13,7 +14,11 @@ from distlift.config.models import (
     VersionFormat,
     VersionSource,
 )
-from distlift.constants import DEFAULT_REMOTE, DEFAULT_TAG_TEMPLATE, DEFAULT_VERSION
+from distlift.constants import (
+    DEFAULT_REMOTE,
+    DEFAULT_TAG_TEMPLATE,
+    DEFAULT_VERSION,
+)
 
 T = TypeVar("T")
 
@@ -72,9 +77,14 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         layers, "default_version", DEFAULT_VERSION, field_sources
     )
     version_format = merge_optional_scalar(
-        layers, "version_format", VersionFormat.MAJOR_MINOR_PATCH, field_sources
+        layers,
+        "version_format",
+        VersionFormat.MAJOR_MINOR_PATCH,
+        field_sources,
     )
-    remotes = merge_string_list(layers, "remotes", [DEFAULT_REMOTE], field_sources)
+    remotes = merge_string_list(
+        layers, "remotes", [DEFAULT_REMOTE], field_sources
+    )
     tag_template = merge_optional_scalar(
         layers, "tag_template", DEFAULT_TAG_TEMPLATE, field_sources
     )
@@ -95,7 +105,9 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
             enable_builtin=pc.enable_builtin,
             allow_override=pc.allow_override,
             paths=pc.paths if pc.paths else plugin_config.paths,
-            directories=pc.directories if pc.directories else plugin_config.directories,
+            directories=pc.directories
+            if pc.directories
+            else plugin_config.directories,
         )
 
     # Merge monorepo config
@@ -109,8 +121,9 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         packages=list(packages_map.values()),
     )
 
-    from distlift.config.models import ReleaseMode
     from pathlib import Path
+
+    from distlift.config.models import ReleaseMode
 
     return ResolvedConfig(
         language=language,

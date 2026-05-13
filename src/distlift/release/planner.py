@@ -60,11 +60,9 @@ def plan_simple_release(
 def plan_monorepo_release(
     plans: list[PackageReleasePlan],
     config: ResolvedConfig,
-    repo_root: "Path",  # noqa: F821
+    repo_root: Path,  # noqa: F821
     dry_run: bool = False,
 ) -> ReleasePlan:
-    from pathlib import Path
-
     commit_msg = build_commit_message(plans)
     tag_names = [p.resolved_version.tag_name for p in plans]
     return ReleasePlan(

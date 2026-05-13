@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import attrs
 
 from distlift.logging_utils import get_logger
 from distlift.plugins.base import DistliftPlugin
 from distlift.plugins.discovery import (
-    DiscoveredPlugin,
     discover_entry_point_plugins,
     discover_plugins_from_paths,
     expand_plugin_directories,
@@ -42,7 +41,9 @@ class PluginManager:
             all_plugins.extend(self.load_environment_plugins())
 
         if request.plugin_paths:
-            all_plugins.extend(self.load_explicit_plugins(request.plugin_paths))
+            all_plugins.extend(
+                self.load_explicit_plugins(request.plugin_paths)
+            )
 
         if request.plugin_directories:
             candidates = expand_plugin_directories(request.plugin_directories)
@@ -54,7 +55,9 @@ class PluginManager:
                 log.debug("Registered plugin: %s", plugin.get_name())
             except Exception as exc:
                 log.warning(
-                    "Plugin '%s' failed to register: %s", plugin.get_name(), exc
+                    "Plugin '%s' failed to register: %s",
+                    plugin.get_name(),
+                    exc,
                 )
 
         return registry
@@ -68,6 +71,8 @@ class PluginManager:
         candidates = discover_entry_point_plugins()
         return load_plugins(candidates)
 
-    def load_explicit_plugins(self, paths: Sequence[Path]) -> list[DistliftPlugin]:
+    def load_explicit_plugins(
+        self, paths: Sequence[Path]
+    ) -> list[DistliftPlugin]:
         candidates = discover_plugins_from_paths(paths)
         return load_plugins(candidates)

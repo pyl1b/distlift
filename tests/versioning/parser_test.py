@@ -3,8 +3,8 @@ import pytest
 from distlift.config.models import VersionFormat
 from distlift.errors import VersionError
 from distlift.versioning.parser import (
-    parse_version,
     parse_tag_version,
+    parse_version,
     strip_tag_prefix,
 )
 
@@ -40,7 +40,9 @@ class TestParseVersion:
 
 class TestParseTagVersion:
     def test_simple_template(self):
-        p = parse_tag_version("v1.2.3", "v{version}", VersionFormat.MAJOR_MINOR_PATCH)
+        p = parse_tag_version(
+            "v1.2.3", "v{version}", VersionFormat.MAJOR_MINOR_PATCH
+        )
         assert (p.major, p.minor, p.patch) == (1, 2, 3)
 
     def test_monorepo_template(self):
@@ -54,7 +56,9 @@ class TestParseTagVersion:
 
     def test_wrong_template_raises(self):
         with pytest.raises(VersionError):
-            parse_tag_version("1.2.3", "v{version}", VersionFormat.MAJOR_MINOR_PATCH)
+            parse_tag_version(
+                "1.2.3", "v{version}", VersionFormat.MAJOR_MINOR_PATCH
+            )
 
 
 class TestStripTagPrefix:

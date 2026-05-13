@@ -1,18 +1,21 @@
 import subprocess
 from pathlib import Path
 
-import pytest
-
-from distlift.config.models import ManagedPackageConfig, VersionFormat, VersionSource
+from distlift.config.models import (
+    ManagedPackageConfig,
+    VersionFormat,
+    VersionSource,
+)
 from distlift.monorepo.change_detector import (
-    find_changed_packages,
     find_package_last_tag,
     package_has_changes_since_tag,
 )
 from distlift.vcs.git import GitRepository
 
 
-def _pkg(name: str = "pkgA", path: str = "packages/pkgA") -> ManagedPackageConfig:
+def _pkg(
+    name: str = "pkgA", path: str = "packages/pkgA"
+) -> ManagedPackageConfig:
     return ManagedPackageConfig(
         name=name,
         path=path,
@@ -54,7 +57,10 @@ class TestPackageHasChangesSinceTag:
 
         (pkg_dir / "src.py").write_text("x=1")
         subprocess.run(
-            ["git", "add", "."], cwd=tmp_git_repo, check=True, capture_output=True
+            ["git", "add", "."],
+            cwd=tmp_git_repo,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "commit", "-m", "change pkg"],

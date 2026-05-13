@@ -32,7 +32,9 @@ def set_project_version(path: Path, version: str) -> None:
         raise ManifestUpdateError(f"Cannot read {path}: {exc}") from exc
 
     if "project" not in doc:
-        raise ManifestUpdateError(f"pyproject.toml at {path} has no [project] section")
+        raise ManifestUpdateError(
+            f"pyproject.toml at {path} has no [project] section"
+        )
 
     if project_uses_dynamic_version(doc):  # type: ignore[arg-type]
         raise ManifestUpdateError(

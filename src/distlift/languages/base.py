@@ -17,7 +17,9 @@ class ProjectAdapter(ABC):
         """Return True if root looks like a project this adapter handles."""
 
     @abstractmethod
-    def load_release_target(self, root: Path, config: ResolvedConfig) -> ReleaseTarget:
+    def load_release_target(
+        self, root: Path, config: ResolvedConfig
+    ) -> ReleaseTarget:
         """Build a ReleaseTarget for the project rooted at root."""
 
     @abstractmethod
@@ -29,5 +31,7 @@ class ProjectAdapter(ABC):
         """Read the current version from the manifest file, or None if absent."""
 
     @abstractmethod
-    def update_manifest_version(self, target: ReleaseTarget, version: str) -> None:
+    def update_manifest_version(
+        self, target: ReleaseTarget, version: str
+    ) -> None:
         """Write version into the manifest file."""

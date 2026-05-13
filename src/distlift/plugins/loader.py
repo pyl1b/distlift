@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Sequence
 
 from distlift.errors import PluginError
 from distlift.logging_utils import get_logger
@@ -39,7 +39,9 @@ def load_plugin_module_from_path(path: Path) -> ModuleType:
     try:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except Exception as exc:
-        raise PluginError(f"Failed to load plugin module from {path}: {exc}") from exc
+        raise PluginError(
+            f"Failed to load plugin module from {path}: {exc}"
+        ) from exc
     return module
 
 
@@ -95,13 +97,19 @@ def _find_plugin_factory(module: ModuleType, name: str) -> object:
     )
 
 
-def load_plugins(candidates: Sequence[DiscoveredPlugin]) -> list[DistliftPlugin]:
+def load_plugins(
+    candidates: Sequence[DiscoveredPlugin],
+) -> list[DistliftPlugin]:
     """Load all candidates, logging and skipping failures."""
     results: list[DistliftPlugin] = []
     for candidate in candidates:
         try:
             plugin = load_discovered_plugin(candidate)
-            log.debug("Loaded plugin '%s' from %s", plugin.get_name(), candidate.source)
+            log.debug(
+                "Loaded plugin '%s' from %s",
+                plugin.get_name(),
+                candidate.source,
+            )
             results.append(plugin)
         except PluginError as exc:
             log.warning("Skipping plugin '%s': %s", candidate.name, exc)

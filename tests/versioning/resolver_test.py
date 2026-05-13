@@ -51,15 +51,27 @@ class TestResolveNextVersion:
     def test_bump(self):
         current = VersionParts(major=1, minor=2, patch=3)
         result = resolve_next_version(
-            current, BumpKind.PATCH, None, VersionFormat.MAJOR_MINOR_PATCH, "v{version}"
+            current,
+            BumpKind.PATCH,
+            None,
+            VersionFormat.MAJOR_MINOR_PATCH,
+            "v{version}",
         )
-        assert (result.next.major, result.next.minor, result.next.patch) == (1, 2, 4)
+        assert (result.next.major, result.next.minor, result.next.patch) == (
+            1,
+            2,
+            4,
+        )
         assert result.tag_name == "v1.2.4"
 
     def test_explicit(self):
         current = VersionParts(major=1, minor=0, patch=0)
         result = resolve_next_version(
-            current, None, "2.0.0", VersionFormat.MAJOR_MINOR_PATCH, "v{version}"
+            current,
+            None,
+            "2.0.0",
+            VersionFormat.MAJOR_MINOR_PATCH,
+            "v{version}",
         )
         assert result.next.major == 2
         assert result.was_explicit
@@ -79,5 +91,9 @@ class TestResolveNextVersion:
         current = VersionParts(major=1, minor=0, patch=0)
         with pytest.raises(VersionError):
             resolve_next_version(
-                current, None, None, VersionFormat.MAJOR_MINOR_PATCH, "v{version}"
+                current,
+                None,
+                None,
+                VersionFormat.MAJOR_MINOR_PATCH,
+                "v{version}",
             )

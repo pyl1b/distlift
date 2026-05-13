@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import attrs
 
@@ -23,7 +23,9 @@ class GitRepository:
     ) -> subprocess.CompletedProcess[str]:
         cmd = ["git", "-C", str(self.root), *args]
         log.log(5, "git %s", " ".join(args))
-        result = subprocess.run(cmd, check=False, text=True, capture_output=True)
+        result = subprocess.run(
+            cmd, check=False, text=True, capture_output=True
+        )
         if check and result.returncode != 0:
             raise GitStateError(
                 f"git {' '.join(args)} failed (exit {result.returncode}):\n"

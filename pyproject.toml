@@ -45,7 +45,7 @@ packages = ["src/distlift"]
 
 [tool.ruff]
 src = ["src"]
-line-length = 88
+line-length = 79
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]

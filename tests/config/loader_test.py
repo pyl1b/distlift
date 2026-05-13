@@ -1,5 +1,4 @@
 from distlift.config.loader import load_environment_config
-from distlift.config.models import Language, VersionFormat
 
 
 class TestLoadEnvironmentConfig:

@@ -8,16 +8,25 @@ from distlift.config.models import Language, ResolvedConfig
 from distlift.errors import UnsupportedLanguageError
 from distlift.languages.base import ProjectAdapter
 from distlift.plugins.registry import PluginRegistry
-from distlift.release.models import ReleasePlan, ReleaseTarget, SimpleReleaseRequest
+from distlift.release.models import (
+    ReleasePlan,
+    ReleaseTarget,
+    SimpleReleaseRequest,
+)
 from distlift.release.planner import plan_simple_release
 from distlift.vcs.git import GitRepository
-from distlift.versioning.resolver import resolve_current_version, resolve_next_version
+from distlift.versioning.resolver import (
+    resolve_current_version,
+    resolve_next_version,
+)
 
 
-def _get_adapter(registry: PluginRegistry, language: Language) -> ProjectAdapter:
+def _get_adapter(
+    registry: PluginRegistry, language: Language
+) -> ProjectAdapter:
     plugin = registry.get_language_plugin(language.value)
-    from distlift.languages.python import PythonProjectPlugin
     from distlift.languages.javascript import JavaScriptProjectPlugin
+    from distlift.languages.python import PythonProjectPlugin
 
     if isinstance(plugin, PythonProjectPlugin):
         from distlift.languages.python import PythonProjectAdapter
@@ -87,4 +96,6 @@ def compute_simple_release_plan(
         package_name=target.package_name,
     )
 
-    return plan_simple_release(target, resolved, request.config, request.dry_run)
+    return plan_simple_release(
+        target, resolved, request.config, request.dry_run
+    )

@@ -1,3 +1,13 @@
-from distlift.publish.models import BuildArtifact, PublishRequest, PublishResult
+from distlift.publish.models import (
+    BuildArtifact,
+    PublishRequest,
+    PublishResult,
+    PublishRunResult,
+)
 
-__all__ = ["BuildArtifact", "PublishRequest", "PublishResult"]
+__all__ = [
+    "BuildArtifact",
+    "PublishRequest",
+    "PublishResult",
+    "PublishRunResult",
+]

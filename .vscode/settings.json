@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "addopts",
         "conftest",
         "corelib",
         "dataclasses",
@@ -12,6 +13,7 @@
         "setuptools",
         "stdlib",
         "testpypi",
+        "tomlkit",
         "tomllib",
         "typer",
         "Typer",
