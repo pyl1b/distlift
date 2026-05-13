@@ -53,6 +53,10 @@ STUB_CONFIG_CONTENT: str = """\
 #   4. User config (this file, when in the user location)
 #   5. System config (this file, when in the system location)
 #   6. Built-in defaults
+#
+# Release-related keys (language, editor, remotes, …) may appear at the
+# top level below, or only under `[release]`. If you add `[release]`, put
+# those fields inside it—top-level duplicates are ignored by the parser.
 
 # language = "python"                 # python | javascript
 # mode = "simple"                     # simple | monorepo
@@ -63,9 +67,10 @@ STUB_CONFIG_CONTENT: str = """\
 # manifest_path = "pyproject.toml"
 # remotes = ["origin"]
 
-# Optional editor command used as a fallback when neither GIT_EDITOR,
-# VISUAL, nor EDITOR is set in the environment. The same string can be
-# supplied via the DISTLIFT_EDITOR environment variable.
+# Optional: default external editor for this machine (user or system file).
+# Used when GIT_EDITOR, VISUAL, and EDITOR are all unset—for example
+# ``distlift config edit-*`` and changelog entry editing. Same value can be
+# set via DISTLIFT_EDITOR instead of this file.
 # editor = "code --wait"
 
 # [changelog]
