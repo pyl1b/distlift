@@ -6,7 +6,15 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.4] - 2026-05-13
+
+### Changed
+
+- Only include packages with changes in mono-repo when using the simple command
 
 ## [0.1.3] - 2026-05-13
 
@@ -49,4 +57,5 @@
 [0.1.1]: https://github.com/pyl1b/distlift/compare/4cb9ee5108b97668875fd2cac9a297a1190f572c...v0.1.1
 [0.1.2]: https://github.com/pyl1b/distlift/compare/v0.1.1...v0.1.2
 [0.1.3]: https://github.com/pyl1b/distlift/compare/v0.1.2...v0.1.3
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.3...HEAD
+[0.1.4]: https://github.com/pyl1b/distlift/compare/v0.1.3...v0.1.4
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.4...HEAD
