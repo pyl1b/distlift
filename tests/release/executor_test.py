@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from distlift.config.models import (
@@ -7,8 +8,12 @@ from distlift.config.models import (
     ResolvedConfig,
     VersionSource,
 )
+from distlift.errors import ChangelogError
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
-from distlift.release.executor import ReleaseExecutor
+from distlift.release.executor import (
+    ReleaseExecutor,
+    _log_release_execution_failure,
+)
 from distlift.release.models import (
     PackageReleasePlan,
     ReleasePlan,
@@ -57,3 +62,23 @@ class TestDryRunExecution:
         assert result.success
         assert result.dry_run
         assert result.tag_names == ["v0.1.1"]
+
+
+class TestReleaseExecutionFailureLogging:
+    def test_distlift_error_emits_no_error_log_record(self, caplog):
+        """Expected ``DistliftError`` failures avoid ERROR noise (CLI prints)."""
+        caplog.set_level(logging.ERROR, logger="distlift.release.executor")
+
+        _log_release_execution_failure(ChangelogError("changelog problem"))
+
+        assert not caplog.records
+
+    def test_unexpected_error_emits_error_log_record(self, caplog):
+        """Unexpected exceptions still produce an ERROR log line."""
+        caplog.set_level(logging.ERROR, logger="distlift.release.executor")
+
+        _log_release_execution_failure(ValueError("boom"))
+
+        assert caplog.records
+        assert caplog.records[0].levelno == logging.ERROR
+        assert "boom" in caplog.text

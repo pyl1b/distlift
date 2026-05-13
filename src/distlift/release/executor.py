@@ -6,16 +6,44 @@ from distlift.changelog.builder import render_inserted_entry_preview
 from distlift.changelog.editor_prompt import maybe_prompt_edit_changelog_entry
 from distlift.changelog.writer import write_changelog_document
 from distlift.config.models import Language, ResolvedConfig
-from distlift.errors import HookExecutionError
+from distlift.errors import DistliftError, HookExecutionError
 from distlift.hooks import build_hook_env, run_hook_specs, specs_for_event
 from distlift.languages.base import ProjectAdapter
-from distlift.logging_utils import get_logger
+from distlift.logging_utils import TRACE, get_logger
 from distlift.plugins.registry import PluginRegistry
 from distlift.release.models import ReleasePlan, ReleaseResult
 from distlift.release.planner import build_tag_messages
 from distlift.vcs.git import GitRepository
 
 log = get_logger(__name__)
+
+
+def _log_release_execution_failure(exc: BaseException) -> None:
+    """Emit a log record for a failed release execution.
+
+    Expected :class:`DistliftError` values are omitted at ERROR so callers can
+    surface ``str(exc)`` once (for example the CLI) without duplicating text or
+    printing tracebacks; they are still logged at TRACE with ``exc_info`` for
+    ``--verbose`` runs. Unexpected exceptions log at ERROR with a traceback.
+
+    Args:
+        exc: Exception raised while executing the release plan.
+    """
+    if isinstance(exc, DistliftError):
+        log.log(
+            TRACE,
+            "Release execution failed: %s",
+            exc,
+            exc_info=True,
+        )
+
+        return
+
+    log.error(
+        "Release execution failed: %s",
+        exc,
+        exc_info=True,
+    )
 
 
 def _get_adapter(
@@ -165,11 +193,7 @@ class ReleaseExecutor:
                         exc_info=True,
                     )
 
-                    log.error(
-                        "Release execution failed: %s",
-                        exc,
-                        exc_info=True,
-                    )
+                    _log_release_execution_failure(exc)
 
                     return ReleaseResult(
                         success=False,
@@ -180,11 +204,7 @@ class ReleaseExecutor:
                         error=str(hook_exc),
                     )
 
-            log.error(
-                "Release execution failed: %s",
-                exc,
-                exc_info=True,
-            )
+            _log_release_execution_failure(exc)
 
             return ReleaseResult(
                 success=False,
