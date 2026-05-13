@@ -28,6 +28,11 @@ class RegisteredPlugin:
     overrides: str | None = None
 
 
+def _empty_registered_map() -> dict[str, RegisteredPlugin]:
+    """Return a new empty map for plugin registry buckets."""
+    return {}
+
+
 @attrs.define
 class PluginRegistry:
     """Holds at most one active plugin per capability key.
@@ -45,10 +50,18 @@ class PluginRegistry:
 
     allow_override: bool = True
 
-    _language_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
-    _manifest_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
-    _publish_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
-    _version_source_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
+    _language_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
+    _manifest_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
+    _publish_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
+    _version_source_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
     _git_backend: RegisteredPlugin | None = None
     _changelog_plugin: RegisteredPlugin | None = None
 

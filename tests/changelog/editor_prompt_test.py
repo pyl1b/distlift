@@ -115,7 +115,9 @@ class TestMaybePromptEditChangelogEntry:
         )
 
         def fake_edit(
-            initial: str, *, editor_command: str | None = None
+            initial: str,
+            *,
+            editor_command: str | None = None,
         ) -> str:
             entry = plan.inserted_release
             updated = ChangelogReleaseEntry(
@@ -161,7 +163,9 @@ class TestMaybePromptEditChangelogEntry:
         captured: dict[str, str | None] = {"editor_command": "<missing>"}
 
         def fake_edit(
-            initial: str, *, editor_command: str | None = None
+            initial: str,
+            *,
+            editor_command: str | None = None,
         ) -> str:
             captured["editor_command"] = editor_command
             return render_release_entry(plan.inserted_release)

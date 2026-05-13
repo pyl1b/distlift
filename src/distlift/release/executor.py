@@ -328,8 +328,7 @@ class ReleaseExecutor:
             plan: Active release plan.
             git: Repository handle for the same repo_root as the plan.
             pushed_out: List mutated in place with each remote that fully
-                finishes branch and tag pushes (for partial progress on
-                errors).
+                finishes branch and tag pushes (partial progress on errors).
         """
         branch = git.get_current_branch()
 

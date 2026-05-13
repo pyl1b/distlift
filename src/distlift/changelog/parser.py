@@ -164,13 +164,14 @@ def parse_release_entry_markdown(text: str) -> ChangelogReleaseEntry:
             "Changelog fragment must contain a ## [version] release heading"
         )
 
-    tail = lines[start_idx + 1 :]
+    tail_start = start_idx + 1
+    tail = lines[tail_start:]
 
     for line in tail:
         if line.startswith("## "):
             raise ChangelogError(
-                "Changelog fragment must contain exactly one ## release "
-                "heading"
+                "Changelog fragment must contain exactly one "
+                "## release heading"
             )
 
     block_lines = lines[start_idx:]

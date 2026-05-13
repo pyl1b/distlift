@@ -96,7 +96,7 @@ class TestMergeConfigLayers:
         assert config.editor is None
 
     def test_editor_propagated_and_overrides(self) -> None:
-        """Later layers override the earlier editor and field source updates."""
+        """Later layers override the editor; field source reflects the win."""
 
         layer1 = RawConfig(editor="nano", source="user")
         layer2 = RawConfig(editor="code --wait", source="environment")

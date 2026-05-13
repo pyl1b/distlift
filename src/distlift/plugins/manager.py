@@ -53,7 +53,8 @@ class PluginManager:
         Args:
             request: Load flags and explicit plugin locations.
         """
-        registry = PluginRegistry(allow_override=request.allow_plugin_override)
+        registry = PluginRegistry()
+        registry.allow_override = request.allow_plugin_override
 
         all_plugins: list[DistliftPlugin] = []
 

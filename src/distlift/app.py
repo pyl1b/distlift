@@ -153,7 +153,7 @@ class DistliftApplication:
                 release.
             publish: When ``True``, build and upload after a successful
                 release.
-            skip_changelog: When ``True``, skip changelog planning for this
+            skip_changelog: When ``True``, skip changelog planning in this
                 run.
             skip_changelog_editor: When ``True``, skip interactive changelog
                 entry editing before writes.
@@ -237,10 +237,10 @@ class DistliftApplication:
             config: Effective merged configuration including hooks.
             repo_root: Repository root used as the hook working directory.
             target: Project root and language metadata.
-            label: Package or project display name for hook environment.
+            label: Display name for hooks (package or project).
             dry_run: When True, hooks and registry uploads follow dry-run
                 rules.
-            publish: When True, upload artifacts after a successful build.
+            publish: When True, upload after a successful build.
             release_tag_names: Tag names from the prior release step, if any.
             release_commit_sha: Release commit hash when the release created
                 one.
