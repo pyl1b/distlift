@@ -1,3 +1,5 @@
+"""Public metadata for the distlift package."""
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:

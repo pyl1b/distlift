@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import TypeVar
 
 import attrs
@@ -10,6 +11,7 @@ from distlift.config.models import (
     MonorepoConfig,
     PluginConfig,
     RawConfig,
+    ReleaseMode,
     ResolvedConfig,
     VersionFormat,
     VersionSource,
@@ -25,78 +27,149 @@ T = TypeVar("T")
 
 def merge_optional_scalar(
     layers: Sequence[RawConfig],
-    attr: str,
+    getter: Callable[[RawConfig], T | None],
+    field_name: str,
     default: T,
     field_sources: dict[str, str],
 ) -> T:
+    """Return the last non-``None`` scalar contributed by any layer.
+
+    Args:
+        layers: Configuration layers from lowest to highest precedence.
+        getter: Reads the candidate scalar value from a single layer.
+        field_name: Key recorded in ``field_sources`` when a layer wins.
+        default: Value used when no layer supplies a non-``None`` value.
+        field_sources: Map updated with the winning source per field name.
+    """
     value = default
+
     for layer in layers:
-        candidate = getattr(layer, attr, None)
+        candidate = getter(layer)
+
         if candidate is not None:
             value = candidate
-            field_sources[attr] = layer.source
+            field_sources[field_name] = layer.source
+
     return value  # type: ignore[return-value]
 
 
 def merge_string_list(
     layers: Sequence[RawConfig],
-    attr: str,
+    getter: Callable[[RawConfig], list[str]],
+    field_name: str,
     default: list[str],
     field_sources: dict[str, str],
 ) -> list[str]:
+    """Return the last non-empty string list contributed by any layer.
+
+    Args:
+        layers: Configuration layers from lowest to highest precedence.
+        getter: Reads the candidate list value from a single layer.
+        field_name: Key recorded in ``field_sources`` when a layer wins.
+        default: Value used when every layer yields an empty list.
+        field_sources: Map updated with the winning source per field name.
+    """
     value = default
+
     for layer in layers:
-        candidate = getattr(layer, attr, None)
+        candidate = getter(layer)
+
         if candidate:
             value = candidate
-            field_sources[attr] = layer.source
+            field_sources[field_name] = layer.source
+
     return value
 
 
 def merge_package_maps(
     layers: Sequence[RawConfig],
 ) -> dict[str, ManagedPackageConfig]:
+    """Merge monorepo package declarations across layers by package name.
+
+    Args:
+        layers: Configuration layers from lowest to highest precedence.
+    """
     result: dict[str, ManagedPackageConfig] = {}
+
     for layer in layers:
         for pkg in layer.monorepo.packages:
             result[pkg.name] = pkg
+
     return result
 
 
 def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
-    """Merge ordered config layers into a single ResolvedConfig.
+    """Merge ordered config layers into a single ``ResolvedConfig``.
 
-    Each layer overrides the previous for scalar fields; lists are replaced
-    entirely by the highest-precedence layer that provides them.
+    Each layer overrides the previous for scalar fields; remote lists are
+    replaced entirely by the highest-precedence layer that provides a
+    non-empty list.
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
     """
     field_sources: dict[str, str] = {}
 
-    language = merge_optional_scalar(layers, "language", None, field_sources)
-    mode = merge_optional_scalar(layers, "mode", None, field_sources)
+    language = merge_optional_scalar(
+        layers,
+        lambda layer: layer.language,
+        "language",
+        None,
+        field_sources,
+    )
+    mode = merge_optional_scalar(
+        layers,
+        lambda layer: layer.mode,
+        "mode",
+        None,
+        field_sources,
+    )
     default_version = merge_optional_scalar(
-        layers, "default_version", DEFAULT_VERSION, field_sources
+        layers,
+        lambda layer: layer.default_version,
+        "default_version",
+        DEFAULT_VERSION,
+        field_sources,
     )
     version_format = merge_optional_scalar(
         layers,
+        lambda layer: layer.version_format,
         "version_format",
         VersionFormat.MAJOR_MINOR_PATCH,
         field_sources,
     )
     remotes = merge_string_list(
-        layers, "remotes", [DEFAULT_REMOTE], field_sources
+        layers,
+        lambda layer: layer.remotes,
+        "remotes",
+        [DEFAULT_REMOTE],
+        field_sources,
     )
     tag_template = merge_optional_scalar(
-        layers, "tag_template", DEFAULT_TAG_TEMPLATE, field_sources
+        layers,
+        lambda layer: layer.tag_template,
+        "tag_template",
+        DEFAULT_TAG_TEMPLATE,
+        field_sources,
     )
     version_source = merge_optional_scalar(
-        layers, "version_source", VersionSource.MANIFEST, field_sources
+        layers,
+        lambda layer: layer.version_source,
+        "version_source",
+        VersionSource.MANIFEST,
+        field_sources,
     )
     manifest_path_str = merge_optional_scalar(
-        layers, "manifest_path", None, field_sources
+        layers,
+        lambda layer: layer.manifest_path,
+        "manifest_path",
+        None,
+        field_sources,
     )
 
-    # Merge plugin config: last non-default wins per field
+    # Merge plugin config so later layers override earlier plugin fields
     plugin_config = PluginConfig()
+
     for layer in layers:
         pc = layer.plugins
         plugin_config = attrs.evolve(
@@ -110,20 +183,18 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
             else plugin_config.directories,
         )
 
-    # Merge monorepo config
+    # Build monorepo config by OR-ing enabled flags and merging packages
     packages_map = merge_package_maps(layers)
     monorepo_enabled = False
+
     for layer in layers:
         if layer.monorepo.enabled:
             monorepo_enabled = True
+
     monorepo_config = MonorepoConfig(
         enabled=monorepo_enabled,
         packages=list(packages_map.values()),
     )
-
-    from pathlib import Path
-
-    from distlift.config.models import ReleaseMode
 
     return ResolvedConfig(
         language=language,

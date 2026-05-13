@@ -1,3 +1,5 @@
+"""Public re-exports for the distlift plugin system."""
+
 from distlift.plugins.base import (
     DistliftPlugin,
     GitBackendPlugin,

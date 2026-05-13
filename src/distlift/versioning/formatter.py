@@ -1,3 +1,5 @@
+"""String formatting for versions and Git tag names."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -9,11 +11,17 @@ if TYPE_CHECKING:
 
 
 def format_version(parts: VersionParts) -> str:
-    """Format a VersionParts into a version string matching its format."""
+    """Format ``parts`` as a version string for its configured format.
+
+    Args:
+        parts: Structured version with an embedded ``VersionFormat``.
+    """
     if parts.fmt == VersionFormat.MAJOR:
         return str(parts.major)
+
     if parts.fmt == VersionFormat.MAJOR_MINOR:
         return f"{parts.major}.{parts.minor}"
+
     return f"{parts.major}.{parts.minor}.{parts.patch}"
 
 
@@ -22,8 +30,17 @@ def format_tag(
     template: str,
     package_name: str | None = None,
 ) -> str:
-    """Build a tag string by substituting version (and optionally package) into the template."""
+    """Fill ``version`` and optional ``package_name`` into ``template``.
+
+    Args:
+        version: Already-formatted version text to embed in the tag.
+        template: Tag template containing ``{version}`` and optional
+            ``{package}`` placeholders.
+        package_name: Monorepo package segment for ``{package}``, if present.
+    """
     result = template.replace("{version}", version)
+
     if package_name is not None:
         result = result.replace("{package}", package_name)
+
     return result

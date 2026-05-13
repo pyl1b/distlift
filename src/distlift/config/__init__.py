@@ -1,3 +1,5 @@
+"""Public configuration models re-exported from ``distlift.config``."""
+
 from distlift.config.models import (
     BumpKind,
     Language,

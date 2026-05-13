@@ -1,3 +1,5 @@
+"""Parse version strings and extract versions from Git tag names."""
+
 from __future__ import annotations
 
 import re
@@ -8,13 +10,26 @@ from distlift.versioning.models import VersionParts
 
 
 def parse_version(text: str, fmt: VersionFormat) -> VersionParts:
-    """Parse a version string according to the given format."""
+    """Parse ``text`` as a version for the given ``fmt``.
+
+    Args:
+        text: Raw version string, surrounding whitespace is ignored.
+        fmt: Expected numeric shape (major-only, two-part, or three-part).
+
+    Returns:
+        Structured ``VersionParts`` matching ``fmt``.
+
+    Raises:
+        VersionError: When ``text`` does not match the expected pattern.
+    """
     text = text.strip()
+
     if fmt == VersionFormat.MAJOR:
         m = re.fullmatch(r"(\d+)", text)
         if not m:
             raise VersionError(
-                f"Version '{text}' is not valid for format '{fmt.value}' (expected N)"
+                f"Version '{text}' is not valid for format '{fmt.value}' "
+                "(expected N)"
             )
         return VersionParts(major=int(m.group(1)), minor=0, patch=0, fmt=fmt)
 
@@ -22,17 +37,23 @@ def parse_version(text: str, fmt: VersionFormat) -> VersionParts:
         m = re.fullmatch(r"(\d+)\.(\d+)", text)
         if not m:
             raise VersionError(
-                f"Version '{text}' is not valid for format '{fmt.value}' (expected N.N)"
+                f"Version '{text}' is not valid for format '{fmt.value}' "
+                "(expected N.N)"
             )
         return VersionParts(
-            major=int(m.group(1)), minor=int(m.group(2)), patch=0, fmt=fmt
+            major=int(m.group(1)),
+            minor=int(m.group(2)),
+            patch=0,
+            fmt=fmt,
         )
 
     m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", text)
     if not m:
         raise VersionError(
-            f"Version '{text}' is not valid for format '{fmt.value}' (expected N.N.N)"
+            f"Version '{text}' is not valid for format '{fmt.value}' "
+            "(expected N.N.N)"
         )
+
     return VersionParts(
         major=int(m.group(1)),
         minor=int(m.group(2)),
@@ -42,9 +63,14 @@ def parse_version(text: str, fmt: VersionFormat) -> VersionParts:
 
 
 def strip_tag_prefix(tag: str) -> str:
-    """Strip a leading 'v' or 'V' prefix from a tag."""
+    """Remove a single leading ``v`` or ``V`` from ``tag`` if present.
+
+    Args:
+        tag: Raw tag text, typically as returned by Git.
+    """
     if tag.startswith(("v", "V")):
         return tag[1:]
+
     return tag
 
 
@@ -54,18 +80,37 @@ def parse_tag_version(
     fmt: VersionFormat,
     package_name: str | None = None,
 ) -> VersionParts:
-    """Extract the version from a tag string using the given template."""
+    """Parse the embedded version from ``tag`` using ``template`` and ``fmt``.
+
+    Args:
+        tag: Concrete tag name from the repository.
+        template: Tag template with ``{version}`` and optional ``{package}``.
+        fmt: Version format used when parsing the extracted version text.
+        package_name: Expected package segment when ``{package}`` is used.
+    """
     version_text = _extract_version_from_tag(tag, template, package_name)
+
     return parse_version(version_text, fmt)
 
 
 def _extract_version_from_tag(
-    tag: str, template: str, package_name: str | None
+    tag: str,
+    template: str,
+    package_name: str | None,
 ) -> str:
+    """Compile ``template`` to a regex and capture the version from ``tag``.
+
+    Args:
+        tag: Concrete tag name from the repository.
+        template: Tag template with ``{version}`` and optional ``{package}``.
+        package_name: Literal package name to match, or None for a wildcard.
+    """
     pattern = re.escape(template)
     pattern = pattern.replace(
-        r"\{version\}", r"(?P<version>[^\-]+(?:\.[^\-]+)*)"
+        r"\{version\}",
+        r"(?P<version>[^\-]+(?:\.[^\-]+)*)",
     )
+
     if package_name:
         pattern = pattern.replace(r"\{package\}", re.escape(package_name))
     else:
@@ -74,4 +119,5 @@ def _extract_version_from_tag(
     m = re.fullmatch(pattern, tag)
     if not m:
         raise VersionError(f"Tag '{tag}' does not match template '{template}'")
+
     return m.group("version")

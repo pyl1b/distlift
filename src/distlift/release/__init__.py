@@ -1,3 +1,5 @@
+"""Release planning models and helpers exported from ``distlift.release``."""
+
 from distlift.release.models import (
     MonorepoReleaseRequest,
     PackageReleasePlan,

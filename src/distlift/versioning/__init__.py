@@ -1,3 +1,5 @@
+"""Version parsing, formatting, bumping, and resolution helpers."""
+
 from distlift.versioning.bump import bump_version, validate_bump_allowed
 from distlift.versioning.formatter import format_tag, format_version
 from distlift.versioning.models import (

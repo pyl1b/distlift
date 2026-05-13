@@ -15,7 +15,12 @@ def build_python_distributions(
     project_root: Path,
     outdir: Path | None = None,
 ) -> list[BuildArtifact]:
-    """Run `python -m build` and return the produced artifacts."""
+    """Run ``python -m build`` and collect wheel and sdist outputs.
+
+    Args:
+        project_root: Directory containing ``pyproject.toml`` for the build.
+        outdir: Optional output directory; defaults to ``project_root/dist``.
+    """
     cmd = ["python", "-m", "build"]
     if outdir:
         cmd += ["--outdir", str(outdir)]
@@ -36,7 +41,11 @@ def build_python_distributions(
 
 
 def publish_python_distributions(request: PublishRequest) -> PublishResult:
-    """Upload artifacts with twine or uv publish."""
+    """Upload artifacts with ``python -m twine upload`` (plus extras).
+
+    Args:
+        request: Artifacts, optional index URL, dry-run flag, and extra args.
+    """
     cmd = ["python", "-m", "twine", "upload"]
     if request.repository_url:
         cmd += ["--repository-url", request.repository_url]

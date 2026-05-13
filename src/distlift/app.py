@@ -1,3 +1,5 @@
+"""Application facade wiring configuration, plugins, release, and publish."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -43,7 +45,8 @@ def _collect_artifacts_for_target(
 
     Args:
         target: Resolved project root and language.
-        package_manager: npm, pnpm, or yarn for JavaScript projects.
+        package_manager: Package manager string (``npm``, ``pnpm``, or
+            ``yarn``) for JavaScript projects.
 
     Returns:
         Built artifacts returned by the language-specific builder.
@@ -53,9 +56,11 @@ def _collect_artifacts_for_target(
 
     root = target.root
 
+    # Dispatch to the Python builder when the target is a Python project
     if target.language == Language.PYTHON:
         return build_python_distributions(root)
 
+    # Dispatch to the JavaScript builder when the target is a JS project
     if target.language == Language.JAVASCRIPT:
         return build_javascript_distributions(
             root, package_manager=package_manager
@@ -76,7 +81,7 @@ def _build_target_only(
 
     Args:
         target: Resolved project root and language.
-        package_manager: npm, pnpm, or yarn for JavaScript projects.
+        package_manager: Package manager string for JavaScript projects.
 
     Returns:
         A successful result carrying the produced artifacts.
@@ -94,8 +99,9 @@ def _build_and_publish_target(
 
     Args:
         target: Resolved project root and language.
-        dry_run: When True, uploads are skipped by the publisher implementations.
-        package_manager: npm, pnpm, or yarn for JavaScript projects.
+        dry_run: When ``True``, uploads are skipped by the publisher
+            implementations.
+        package_manager: Package manager string for JavaScript projects.
 
     Returns:
         Result of the publish step for the built artifacts.
@@ -106,9 +112,11 @@ def _build_and_publish_target(
     artifacts = _collect_artifacts_for_target(target, package_manager)
     request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
 
+    # Route the publish request to the Python publisher implementation
     if target.language == Language.PYTHON:
         return publish_python_distributions(request)
 
+    # Route the publish request to the JavaScript publisher implementation
     if target.language == Language.JAVASCRIPT:
         return publish_javascript_distributions(
             request, package_manager=package_manager
@@ -123,6 +131,15 @@ def _build_and_publish_target(
 
 @attrs.define
 class DistliftApplication:
+    """Coordinates config loading, plugin setup, releases, and publishing.
+
+    Instances are stateless facades; they do not hold mutable run state beyond
+    what callers pass into each method.
+
+    Attributes:
+        None
+    """
+
     def run_default_command(
         self,
         repo_root: Path,
@@ -135,26 +152,33 @@ class DistliftApplication:
     ) -> tuple[ReleaseResult, PublishRunResult | None]:
         """Run patch release plus optional artifact build or publish.
 
-        Simple mode bumps the patch level. Monorepo mode uses the same selection
-        rules as ``distlift release monorepo`` without ``--all-changed`` or
-        ``--package`` (every managed package is included).
+        Simple mode bumps the patch level. Monorepo mode uses the same
+        selection rules as ``distlift release monorepo`` without
+        ``--all-changed`` or ``--package`` (every managed package is included).
 
         Args:
-            repo_root: Repository root.
-            config: Effective resolved configuration.
-            dry_run: When True, skips release Git writes and registry uploads.
-            build: When True, build distributions after a successful release.
-            publish: When True, build and upload after a successful release.
-            registry: Optional pre-built plugin registry.
+            repo_root: Repository root directory path.
+            config: Effective merged ``ResolvedConfig`` for this run.
+            dry_run: When ``True``, skips release Git writes and registry
+                uploads according to each step's semantics.
+            build: When ``True``, build distributions after a successful
+                release.
+            publish: When ``True``, build and upload after a successful
+                release.
+            registry: Optional pre-built ``PluginRegistry``; when omitted, a
+                default registry is built from ``config``.
 
         Returns:
-            Release outcome, then build/publish aggregate when requested, else None.
+            Release outcome, then build/publish aggregate when requested, else
+            ``None`` for the second element.
         """
+        # Resolve a registry once for both release and optional publish steps
         if registry is None:
             registry = self._default_registry(config)
 
         root = repo_root.resolve()
 
+        # Branch between monorepo and simple release planning and execution
         if config.mode == ReleaseMode.MONOREPO:
             monorepo_req = MonorepoReleaseRequest(
                 repo_root=root,
@@ -207,14 +231,16 @@ class DistliftApplication:
         *,
         registry: PluginRegistry,
     ) -> PublishRunResult:
-        """Build and optionally publish artifacts for each relevant package root.
+        """Build and optionally publish per targeted package root.
 
         Args:
-            repo_root: Resolved repository root.
-            config: Effective resolved configuration.
-            dry_run: Passed through to publishers when ``publish`` is True.
-            build: When True and ``publish`` is False, build only per project.
-            publish: When True, build and invoke the registry publisher.
+            repo_root: Resolved repository root directory path.
+            config: Effective merged ``ResolvedConfig`` for this run.
+            dry_run: Passed through to publishers when ``publish`` is
+                ``True``.
+            build: When ``True`` and ``publish`` is ``False``, build only per
+                project.
+            publish: When ``True``, build and invoke the registry publisher.
             registry: Loaded plugin registry (must match release planning).
 
         Returns:
@@ -232,6 +258,8 @@ class DistliftApplication:
                     else config
                 )
                 target = prepare_simple_target(pkg_root, pkg_config, registry)
+
+                # Either publish (build+upload) or build-only per package
                 if publish:
                     pr = _build_and_publish_target(target, dry_run)
                 else:
@@ -241,6 +269,7 @@ class DistliftApplication:
         else:
             target = prepare_simple_target(repo_root, config, registry)
             label = target.package_name or repo_root.name
+
             if publish:
                 pr = _build_and_publish_target(target, dry_run)
             else:
@@ -256,6 +285,16 @@ class DistliftApplication:
         request: SimpleReleaseRequest,
         registry: PluginRegistry | None = None,
     ) -> ReleaseResult:
+        """Plan and execute a simple (single-package) release.
+
+        Args:
+            request: Simple release request with repo root, bump, and flags.
+            registry: Optional ``PluginRegistry``; when omitted, one is built
+                from ``request.config``.
+
+        Returns:
+            ``ReleaseResult`` describing success, tags, pushes, or error text.
+        """
         try:
             if registry is None:
                 registry = self._default_registry(request.config)
@@ -275,6 +314,16 @@ class DistliftApplication:
         request: MonorepoReleaseRequest,
         registry: PluginRegistry | None = None,
     ) -> ReleaseResult:
+        """Plan and execute a monorepo release for the requested packages.
+
+        Args:
+            request: Monorepo release request with selection and bump defaults.
+            registry: Optional ``PluginRegistry``; when omitted, one is built
+                from ``request.config``.
+
+        Returns:
+            ``ReleaseResult`` describing success, tags, pushes, or error text.
+        """
         try:
             if registry is None:
                 registry = self._default_registry(request.config)
@@ -298,18 +347,20 @@ class DistliftApplication:
         dry_run: bool,
         registry: PluginRegistry | None = None,
     ) -> PublishRunResult:
-        """Build distributions and invoke the publisher for each configured package.
+        """Build distributions and invoke the publisher for each package root.
 
         In monorepo mode, every declared package root is published in sequence.
 
         Args:
             repo_root: Repository root containing the workspace.
             config: Resolved effective configuration.
-            dry_run: When True, upload steps honor per-language dry-run semantics.
-            registry: Optional pre-built plugin registry.
+            dry_run: When ``True``, upload steps honor per-language dry-run
+                semantics.
+            registry: Optional pre-built ``PluginRegistry``.
 
         Returns:
-            Aggregated outcomes; ``error`` is set when setup fails before publish.
+            Aggregated outcomes; ``error`` is set when setup fails before
+            publish.
         """
         try:
             if registry is None:
@@ -352,6 +403,16 @@ class DistliftApplication:
         repo_root: Path,
         extra_config_paths: list[Path] | None = None,
     ) -> ResolvedConfig:
+        """Load and merge configuration layers for a repository.
+
+        Args:
+            repo_root: Repository root used to locate standard config files.
+            extra_config_paths: Optional additional TOML paths merged in order
+                after discovered layers.
+
+        Returns:
+            Fully merged ``ResolvedConfig`` for downstream release logic.
+        """
         layers = load_config_layers(
             repo_root=repo_root,
             extra_paths=extra_config_paths,
@@ -360,9 +421,25 @@ class DistliftApplication:
         return config
 
     def load_plugins(self, config: ResolvedConfig) -> PluginRegistry:
+        """Build the default plugin registry described by ``config``.
+
+        Args:
+            config: Resolved configuration containing plugin paths and flags.
+
+        Returns:
+            A ``PluginRegistry`` with built-in and discovered plugins loaded.
+        """
         return self._default_registry(config)
 
     def _default_registry(self, config: ResolvedConfig) -> PluginRegistry:
+        """Construct the plugin registry from resolved plugin settings.
+
+        Args:
+            config: Resolved configuration supplying plugin discovery options.
+
+        Returns:
+            A new ``PluginRegistry`` built for this configuration snapshot.
+        """
         manager = PluginManager()
         request = PluginLoadRequest(
             plugin_paths=[Path(p) for p in config.plugins.paths],

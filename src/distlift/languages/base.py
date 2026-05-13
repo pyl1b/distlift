@@ -1,3 +1,5 @@
+"""Language-agnostic project adapter interface."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,28 +12,54 @@ if TYPE_CHECKING:
 
 
 class ProjectAdapter(ABC):
-    """Interface for language-specific project detection and manifest management."""
+    """Language-specific project detection and manifest version I/O.
+
+    Attributes:
+        (none; adapters are typically stateless strategy objects.)
+    """
 
     @abstractmethod
     def detect_project(self, root: Path) -> bool:
-        """Return True if root looks like a project this adapter handles."""
+        """Return True when ``root`` looks like a project this adapter handles.
+
+        Args:
+            root: Repository or package root directory.
+        """
 
     @abstractmethod
     def load_release_target(
         self, root: Path, config: ResolvedConfig
     ) -> ReleaseTarget:
-        """Build a ReleaseTarget for the project rooted at root."""
+        """Build a ``ReleaseTarget`` for the project at ``root``.
+
+        Args:
+            root: Project root directory on disk.
+            config: Fully merged distlift configuration.
+        """
 
     @abstractmethod
     def is_dynamic_version(self, target: ReleaseTarget) -> bool:
-        """Return True if the project derives its version from something other than the manifest."""
+        """Return True when the version is not a static manifest field.
+
+        Args:
+            target: Resolved release target for one package.
+        """
 
     @abstractmethod
     def read_manifest_version(self, target: ReleaseTarget) -> str | None:
-        """Read the current version from the manifest file, or None if absent."""
+        """Read the declared version from the manifest, if any.
+
+        Args:
+            target: Resolved release target including ``manifest_path``.
+        """
 
     @abstractmethod
     def update_manifest_version(
         self, target: ReleaseTarget, version: str
     ) -> None:
-        """Write version into the manifest file."""
+        """Persist ``version`` into the manifest file for ``target``.
+
+        Args:
+            target: Resolved release target including ``manifest_path``.
+            version: New version string to write.
+        """

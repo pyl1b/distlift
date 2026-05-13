@@ -1,3 +1,5 @@
+"""Shared pytest fixtures for distlift tests."""
+
 from __future__ import annotations
 
 import subprocess
@@ -8,7 +10,13 @@ import pytest
 
 @pytest.fixture
 def tmp_git_repo(tmp_path: Path) -> Path:
-    """Create a minimal Git repository in a temporary directory."""
+    """Create a minimal Git repository in a temporary directory.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+    """
+
+    # Initialize an empty repository for tests that need real Git commands.
     subprocess.run(
         ["git", "init", str(tmp_path)], check=True, capture_output=True
     )
@@ -24,7 +32,8 @@ def tmp_git_repo(tmp_path: Path) -> Path:
         check=True,
         capture_output=True,
     )
-    # Make an initial commit so HEAD exists
+
+    # Make an initial commit so HEAD exists for diff and tag operations.
     (tmp_path / "README.md").write_text("test\n")
     subprocess.run(
         ["git", "add", "."], cwd=tmp_path, check=True, capture_output=True
@@ -40,7 +49,13 @@ def tmp_git_repo(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def tmp_python_project(tmp_git_repo: Path) -> Path:
-    """A Git repo with a minimal pyproject.toml."""
+    """Create a Git repo with a minimal pyproject.toml.
+
+    Args:
+        tmp_git_repo: Temporary Git repository fixture.
+    """
+
+    # Add the Python package manifest used by language adapter tests.
     (tmp_git_repo / "pyproject.toml").write_text(
         '[project]\nname = "mypackage"\nversion = "0.1.0"\n'
     )
@@ -58,7 +73,13 @@ def tmp_python_project(tmp_git_repo: Path) -> Path:
 
 @pytest.fixture
 def tmp_js_project(tmp_git_repo: Path) -> Path:
-    """A Git repo with a minimal package.json."""
+    """Create a Git repo with a minimal package.json.
+
+    Args:
+        tmp_git_repo: Temporary Git repository fixture.
+    """
+
+    # Add the JavaScript package manifest used by language adapter tests.
     (tmp_git_repo / "package.json").write_text(
         '{\n  "name": "mypkg",\n  "version": "1.0.0"\n}\n'
     )

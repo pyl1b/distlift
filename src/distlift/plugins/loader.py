@@ -1,3 +1,5 @@
+"""Import plugin modules from disk and build ``DistliftPlugin`` objects."""
+
 from __future__ import annotations
 
 import importlib
@@ -16,7 +18,11 @@ log = get_logger(__name__)
 
 
 def load_plugin_module_from_path(path: Path) -> ModuleType:
-    """Import a plugin module from a .py file or package directory."""
+    """Import a plugin module from a ``.py`` file or package directory.
+
+    Args:
+        path: ``.py`` file path or directory that contains ``__init__.py``.
+    """
     path = path.resolve()
 
     if path.is_dir():
@@ -36,17 +42,23 @@ def load_plugin_module_from_path(path: Path) -> ModuleType:
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
+
     try:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except Exception as exc:
         raise PluginError(
             f"Failed to load plugin module from {path}: {exc}"
         ) from exc
+
     return module
 
 
 def load_discovered_plugin(candidate: DiscoveredPlugin) -> DistliftPlugin:
-    """Instantiate a DistliftPlugin from a DiscoveredPlugin descriptor."""
+    """Instantiate a ``DistliftPlugin`` from a discovery record.
+
+    Args:
+        candidate: Descriptor with either ``entry_point`` or ``path`` set.
+    """
     if candidate.entry_point is not None:
         try:
             factory = candidate.entry_point.load()
@@ -59,7 +71,8 @@ def load_discovered_plugin(candidate: DiscoveredPlugin) -> DistliftPlugin:
         factory = _find_plugin_factory(module, candidate.name)
     else:
         raise PluginError(
-            f"DiscoveredPlugin '{candidate.name}' has neither entry_point nor path"
+            f"DiscoveredPlugin {candidate.name!r} has neither "
+            "entry_point nor path"
         )
 
     if callable(factory) and not isinstance(factory, type):
@@ -68,7 +81,8 @@ def load_discovered_plugin(candidate: DiscoveredPlugin) -> DistliftPlugin:
         instance = factory()
     else:
         raise PluginError(
-            f"Plugin '{candidate.name}' factory must be a DistliftPlugin subclass or callable"
+            f"Plugin {candidate.name!r} factory must be a DistliftPlugin "
+            "subclass or callable"
         )
 
     if not isinstance(instance, DistliftPlugin):
@@ -76,14 +90,20 @@ def load_discovered_plugin(candidate: DiscoveredPlugin) -> DistliftPlugin:
             f"Plugin '{candidate.name}' factory returned {type(instance)!r},"
             " expected a DistliftPlugin"
         )
+
     return instance
 
 
 def _find_plugin_factory(module: ModuleType, name: str) -> object:
-    """Look for a get_plugin() function or a Plugin class in the module."""
+    """Resolve ``get_plugin`` or a ``DistliftPlugin`` subclass from ``module``.
+
+    Args:
+        module: Imported plugin module.
+        name: Plugin short name derived from the file or package path.
+    """
     if hasattr(module, "get_plugin"):
         return module.get_plugin  # type: ignore[no-any-return]
-    # Try to find a class named Plugin or matching the module name
+
     for attr_name in ("Plugin", name.title().replace("_", "") + "Plugin"):
         obj = getattr(module, attr_name, None)
         if (
@@ -92,16 +112,23 @@ def _find_plugin_factory(module: ModuleType, name: str) -> object:
             and issubclass(obj, DistliftPlugin)
         ):
             return obj
+
     raise PluginError(
-        f"Plugin module '{module.__name__}' must define get_plugin() or a Plugin class"
+        f"Plugin module {module.__name__!r} must define get_plugin() "
+        "or a Plugin class"
     )
 
 
 def load_plugins(
     candidates: Sequence[DiscoveredPlugin],
 ) -> list[DistliftPlugin]:
-    """Load all candidates, logging and skipping failures."""
+    """Load each candidate, skipping entries that raise ``PluginError``.
+
+    Args:
+        candidates: Discovery records to attempt to load.
+    """
     results: list[DistliftPlugin] = []
+
     for candidate in candidates:
         try:
             plugin = load_discovered_plugin(candidate)
@@ -113,4 +140,5 @@ def load_plugins(
             results.append(plugin)
         except PluginError as exc:
             log.warning("Skipping plugin '%s': %s", candidate.name, exc)
+
     return results

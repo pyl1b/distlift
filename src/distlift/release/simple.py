@@ -24,6 +24,12 @@ from distlift.versioning.resolver import (
 def _get_adapter(
     registry: PluginRegistry, language: Language
 ) -> ProjectAdapter:
+    """Return a project adapter for the registered language plugin.
+
+    Args:
+        registry: Active plugin registry.
+        language: Language enum member to resolve.
+    """
     plugin = registry.get_language_plugin(language.value)
     from distlift.languages.javascript import JavaScriptProjectPlugin
     from distlift.languages.python import PythonProjectPlugin
@@ -46,8 +52,15 @@ def prepare_simple_target(
     config: ResolvedConfig,
     registry: PluginRegistry,
 ) -> ReleaseTarget:
+    """Resolve language (if needed) and build the simple-mode release target.
+
+    Args:
+        root: Repository root used for project detection.
+        config: Resolved configuration; language may be auto-detected.
+        registry: Plugin registry for language plugins and adapters.
+    """
     if config.language is None:
-        # Auto-detect
+        # Try each registered language until one detects a matching project
         for lang in Language:
             plugin = (
                 registry.get_language_plugin(lang.value)
@@ -73,6 +86,12 @@ def compute_simple_release_plan(
     request: SimpleReleaseRequest,
     registry: PluginRegistry,
 ) -> ReleasePlan:
+    """Compute a simple-mode plan: clean tree, resolve versions, build plan.
+
+    Args:
+        request: Repo root, config, bump or explicit version, dry-run flag.
+        registry: Plugin registry used when preparing the release target.
+    """
     git = GitRepository(root=request.repo_root)
     git.ensure_clean_worktree()
 

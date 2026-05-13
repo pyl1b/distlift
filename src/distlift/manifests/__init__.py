@@ -1,3 +1,5 @@
+"""Re-exports for manifest helpers used by language adapters."""
+
 from distlift.manifests.package_json_file import (
     get_package_version,
     read_package_json,

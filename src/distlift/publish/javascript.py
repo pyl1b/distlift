@@ -15,7 +15,12 @@ def build_javascript_distributions(
     project_root: Path,
     package_manager: str = "npm",
 ) -> list[BuildArtifact]:
-    """Run `npm pack` (or pnpm/yarn equivalent) and return artifacts."""
+    """Pack the JavaScript project into ``dist/*.tgz`` using the given PM.
+
+    Args:
+        project_root: Directory containing ``package.json``.
+        package_manager: One of ``npm``, ``pnpm``, or ``yarn``.
+    """
     if package_manager == "npm":
         cmd = ["npm", "pack", "--pack-destination", str(project_root / "dist")]
     elif package_manager == "pnpm":
@@ -48,7 +53,12 @@ def publish_javascript_distributions(
     request: PublishRequest,
     package_manager: str = "npm",
 ) -> PublishResult:
-    """Run `npm publish` (or equivalent) for each artifact."""
+    """Publish each artifact with ``npm publish`` or an equivalent command.
+
+    Args:
+        request: Artifacts and flags; dry-run skips all subprocess calls.
+        package_manager: One of ``npm``, ``pnpm``, or ``yarn``.
+    """
     if request.dry_run:
         return PublishResult(success=True, artifacts=request.artifacts)
 

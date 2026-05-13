@@ -34,6 +34,12 @@ from distlift.versioning.resolver import (
 def _adapter_for(
     registry: PluginRegistry, language: Language
 ) -> ProjectAdapter:
+    """Return a project adapter for the registered language plugin.
+
+    Args:
+        registry: Active plugin registry.
+        language: Language enum member to resolve.
+    """
     from distlift.languages.javascript import (
         JavaScriptProjectAdapter,
         JavaScriptProjectPlugin,
@@ -59,12 +65,21 @@ def discover_managed_targets(
     config: ResolvedConfig,
     registry: PluginRegistry,
 ) -> list[ReleaseTarget]:
+    """Build a ReleaseTarget for each managed package declaration.
+
+    Args:
+        packages: Monorepo package entries from configuration.
+        repo_root: Repository root used to resolve paths.
+        config: Resolved configuration for default language fallbacks.
+        registry: Plugin registry (reserved for future per-package wiring).
+    """
     targets = []
     for pkg in packages:
         language = pkg.language or config.language
         if language is None:
             raise UnsupportedLanguageError(
-                f"Package '{pkg.name}' has no language specified and no default is configured"
+                f"Package {pkg.name!r} has no language configured "
+                "and no repository default exists"
             )
         manifest = resolve_package_manifest_path(pkg, repo_root)
         targets.append(
@@ -87,6 +102,16 @@ def select_changed_targets(
     selected_names: list[str] | None,
     all_changed: bool,
 ) -> list[tuple[ManagedPackageConfig, ReleaseTarget]]:
+    """Pair managed packages with targets that should be part of this release.
+
+    Args:
+        packages: Declared managed packages in configuration order.
+        targets: Parallel list of release targets for those packages.
+        tags: Existing tag names used for change detection.
+        git: Repository handle for diff-based change detection.
+        selected_names: Optional filter of package names to include.
+        all_changed: If True, only packages with commits since their tag.
+    """
     if all_changed:
         changed_pkgs = find_changed_packages(
             packages, tags, git, selected_names or None
@@ -109,6 +134,12 @@ def compute_monorepo_release_plan(
     request: MonorepoReleaseRequest,
     registry: PluginRegistry,
 ) -> ReleasePlan:
+    """Compute a monorepo release plan for changed or selected packages.
+
+    Args:
+        request: Monorepo request with repo root, bumps, and filters.
+        registry: Plugin registry used for adapters and dynamic-version checks.
+    """
     git = GitRepository(root=request.repo_root)
     git.ensure_clean_worktree()
 
@@ -124,6 +155,8 @@ def compute_monorepo_release_plan(
     )
 
     pkg_plans: list[PackageReleasePlan] = []
+
+    # Resolve next version and manifest policy per selected package pair
     for pkg, tgt in pairs:
         template = pkg.tag_template or f"v{{version}}-{pkg.name}"
         fmt = pkg.version_format

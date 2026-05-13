@@ -1,3 +1,5 @@
+"""Typer-based CLI for distlift (release, config, and plugin commands)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +12,7 @@ from distlift.app import DistliftApplication
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
 from distlift.logging_utils import configure_logging
+from distlift.plugins.base import DistliftPlugin
 from distlift.release.models import (
     MonorepoReleaseRequest,
     SimpleReleaseRequest,
@@ -72,7 +75,17 @@ def distlift_main_callback(
         typer.Option("--repo-root", help="Repository root"),
     ] = Path("."),
 ) -> None:
-    """Distlift CLI entry; no subcommand runs a patch release and optional distro steps."""
+    """Distlift CLI entry; no subcommand runs default patch release flow.
+
+    Args:
+        ctx: Typer invocation context (used to detect bare ``distlift`` runs).
+        config_path: Optional extra TOML config path merged after defaults.
+        dry_run: When ``True``, plan release without Git writes.
+        build: When ``True``, build artifacts after a successful release.
+        publish: When ``True``, build and publish after a successful release.
+        verbose: When ``True``, enable verbose logging for this process.
+        repo_root: Filesystem path to the repository root directory.
+    """
     if ctx.invoked_subcommand is not None:
         return
 
@@ -82,6 +95,7 @@ def distlift_main_callback(
     root = repo_root.resolve()
     config = application.load_effective_config(root, extra)
 
+    # Fail fast when merged configuration violates semantic constraints
     try:
         validate_resolved_config(config)
     except Exception as exc:
@@ -153,6 +167,24 @@ def _resolve_app_config(
     dry_run: bool,
     verbose: bool,
 ) -> tuple[DistliftApplication, ResolvedConfig]:
+    """Load merged config and apply CLI overrides for release subcommands.
+
+    Args:
+        repo_root: Absolute repository root directory path.
+        config_path: Optional extra TOML config path merged after defaults.
+        language: Optional language string override (e.g. ``python``).
+        remote: Optional list of Git remote names replacing configured
+            remotes.
+        default_version: Optional default version string when no tag exists.
+        version_format: Optional ``VersionFormat`` enum value as a string.
+        dry_run: Present for a shared helper signature; not read in this
+            function.
+        verbose: When ``True``, enable verbose logging before config load.
+
+    Returns:
+        Application instance and the resolved configuration with CLI layers
+        applied via ``attrs.evolve``.
+    """
     from distlift.config.models import Language as Lang
     from distlift.config.models import VersionFormat
 
@@ -162,6 +194,7 @@ def _resolve_app_config(
     extra = [config_path] if config_path else None
     config = application.load_effective_config(repo_root, extra)
 
+    # Apply explicit language override when provided on the CLI
     if language:
         try:
             lang_enum = Lang(language)
@@ -176,6 +209,7 @@ def _resolve_app_config(
     if default_version:
         config = attrs.evolve(config, default_version=default_version)
 
+    # Apply explicit version format override when provided on the CLI
     if version_format:
         try:
             fmt = VersionFormat(version_format)
@@ -230,7 +264,23 @@ def release_simple_command(
         Path, typer.Option("--repo-root", help="Repository root")
     ] = Path("."),
 ) -> None:
-    """Run a simple (single-package) release."""
+    """Run a simple (single-package) release.
+
+    Args:
+        language: Optional target language override.
+        major: When ``True``, request a major version bump.
+        minor: When ``True``, request a minor version bump.
+        patch: When ``True``, request a patch version bump.
+        version: Optional explicit version string (mutually exclusive with
+            bump flags).
+        config_path: Optional extra TOML config path.
+        remote: Optional Git remote names for push operations.
+        default_version: Optional fallback version when no prior tag exists.
+        version_format: Optional version format string override.
+        dry_run: When ``True``, plan the release without mutating Git state.
+        verbose: When ``True``, enable verbose logging.
+        repo_root: Repository root directory path.
+    """
     selectors = sum([major, minor, patch, version is not None])
     if selectors == 0:
         typer.echo(
@@ -311,7 +361,20 @@ def release_monorepo_command(
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
-    """Run a monorepo (multi-package) release."""
+    """Run a monorepo (multi-package) release.
+
+    Args:
+        all_changed: When ``True``, include every package with changes since
+            its last tag.
+        package: Optional explicit package names to include in this release.
+        default_bump: Default ``BumpKind`` string when a package needs a bump
+            without an explicit selector.
+        config_path: Optional extra TOML config path.
+        remote: Optional Git remote names for push operations.
+        dry_run: When ``True``, plan the release without mutating Git state.
+        verbose: When ``True``, enable verbose logging.
+        repo_root: Repository root directory path.
+    """
     try:
         bump_kind = BumpKind(default_bump)
     except ValueError:
@@ -363,7 +426,12 @@ def list_config_command(
     config_path: Annotated[Path | None, typer.Option("--config")] = None,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
-    """Show the resolved configuration and the source of each field."""
+    """Print the resolved configuration and per-field source annotations.
+
+    Args:
+        config_path: Optional extra TOML config path merged before display.
+        repo_root: Repository root directory path.
+    """
     application = DistliftApplication()
     extra = [config_path] if config_path else None
     config = application.load_effective_config(repo_root.resolve(), extra)
@@ -389,7 +457,12 @@ def validate_config_command(
     config_path: Annotated[Path | None, typer.Option("--config")] = None,
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
 ) -> None:
-    """Validate the resolved configuration."""
+    """Validate the merged configuration for a repository.
+
+    Args:
+        config_path: Optional extra TOML config path merged before validation.
+        repo_root: Repository root directory path.
+    """
     application = DistliftApplication()
     extra = [config_path] if config_path else None
     config = application.load_effective_config(repo_root.resolve(), extra)
@@ -407,7 +480,13 @@ def list_plugins_command(
     repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
 ) -> None:
-    """List all discovered and loaded plugins."""
+    """List plugins discovered and registered for the effective configuration.
+
+    Args:
+        config_path: Optional extra TOML config path merged before discovery.
+        repo_root: Repository root directory path.
+        verbose: When ``True``, enable verbose logging during plugin load.
+    """
     configure_logging(verbose)
     application = DistliftApplication()
     extra = [config_path] if config_path else None
@@ -423,8 +502,10 @@ def list_plugins_command(
     for entry in entries:
         plugin = entry.plugin
         name = (
-            plugin.get_name() if hasattr(plugin, "get_name") else repr(plugin)
-        )  # type: ignore[union-attr]
+            plugin.get_name()
+            if isinstance(plugin, DistliftPlugin)
+            else repr(plugin)
+        )
         override_info = (
             f" (overrides: {entry.overrides})" if entry.overrides else ""
         )

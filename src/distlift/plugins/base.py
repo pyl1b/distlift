@@ -8,7 +8,11 @@ if TYPE_CHECKING:
 
 
 class DistliftPlugin(ABC):
-    """Base interface every distlift plugin must satisfy."""
+    """Base interface every distlift plugin must satisfy.
+
+    Attributes:
+        (none; subclasses implement the abstract API.)
+    """
 
     @abstractmethod
     def get_name(self) -> str:
@@ -20,27 +24,43 @@ class DistliftPlugin(ABC):
 
     @abstractmethod
     def register(self, registry: PluginRegistry) -> None:
-        """Register plugin capabilities into the registry."""
+        """Register plugin capabilities into the registry.
+
+        Args:
+            registry: Active plugin registry to register into.
+        """
 
 
 class LanguagePlugin(DistliftPlugin):
-    """Plugin that provides language detection and project adaptation."""
+    """Plugin that provides language detection and project adaptation.
+
+    Attributes:
+        (none; language plugins register a ProjectAdapter via the registry.)
+    """
 
     @abstractmethod
     def get_language(self) -> str:
-        """Return the language identifier this plugin handles (e.g. 'python')."""
+        """Return the language id this plugin handles (e.g. ``python``)."""
 
 
 class ManifestPlugin(DistliftPlugin):
-    """Plugin that reads and writes a specific manifest format."""
+    """Plugin that reads and writes a specific manifest format.
+
+    Attributes:
+        (none; manifest plugins register readers/writers via the registry.)
+    """
 
     @abstractmethod
     def get_kind(self) -> str:
-        """Return the manifest kind identifier (e.g. 'pyproject', 'package_json')."""
+        """Return manifest kind (e.g. ``pyproject`` or ``package_json``)."""
 
 
 class VersionSourcePlugin(DistliftPlugin):
-    """Plugin that resolves the current version from a non-standard source."""
+    """Plugin that resolves the current version from a non-standard source.
+
+    Attributes:
+        (none; version source plugins register resolvers via the registry.)
+    """
 
     @abstractmethod
     def get_source_name(self) -> str:
@@ -48,7 +68,11 @@ class VersionSourcePlugin(DistliftPlugin):
 
 
 class PublishPlugin(DistliftPlugin):
-    """Plugin that builds and publishes package artifacts."""
+    """Plugin that builds and publishes package artifacts.
+
+    Attributes:
+        (none; publish plugins register publishers via the registry.)
+    """
 
     @abstractmethod
     def get_language(self) -> str:
@@ -56,4 +80,8 @@ class PublishPlugin(DistliftPlugin):
 
 
 class GitBackendPlugin(DistliftPlugin):
-    """Plugin that provides Git repository operations."""
+    """Plugin that provides Git repository operations.
+
+    Attributes:
+        (none; a single Git backend replaces subprocess usage when registered.)
+    """

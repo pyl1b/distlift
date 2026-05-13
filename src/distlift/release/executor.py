@@ -16,6 +16,12 @@ log = get_logger(__name__)
 def _get_adapter(
     registry: PluginRegistry, language: Language
 ) -> ProjectAdapter:
+    """Return a project adapter for the registered language plugin.
+
+    Args:
+        registry: Active plugin registry.
+        language: Language enum member to resolve.
+    """
     from distlift.languages.javascript import (
         JavaScriptProjectAdapter,
         JavaScriptProjectPlugin,
@@ -39,13 +45,26 @@ def _get_adapter(
 
 @attrs.define
 class ReleaseExecutor:
+    """Applies a release plan: manifests, commit, tags, and pushes.
+
+    Attributes:
+        registry: Plugin registry used to resolve language adapters.
+    """
+
     registry: PluginRegistry
 
     def execute(self, plan: ReleasePlan) -> ReleaseResult:
+        """Run the plan or return a dry-run summary without side effects.
+
+        Args:
+            plan: Fully built release plan for this repository.
+        """
         if plan.dry_run:
             return self._dry_run_result(plan)
 
         git = GitRepository(root=plan.repo_root)
+
+        # Apply manifest writes, commit, tag, and push; any failure aborts
         try:
             self._apply_manifest_updates(plan)
             commit_sha = self._commit_release(plan, git)
@@ -59,7 +78,11 @@ class ReleaseExecutor:
                 pushed_remotes=pushed,
             )
         except Exception as exc:
-            log.error("Release execution failed: %s", exc)
+            log.error(
+                "Release execution failed: %s",
+                exc,
+                exc_info=True,
+            )
             return ReleaseResult(
                 success=False,
                 dry_run=False,
@@ -68,6 +91,11 @@ class ReleaseExecutor:
             )
 
     def _apply_manifest_updates(self, plan: ReleasePlan) -> None:
+        """Write next versions into manifests when the plan requires it.
+
+        Args:
+            plan: Release plan whose packages may need manifest updates.
+        """
         for pkg_plan in plan.packages:
             if not pkg_plan.update_manifest:
                 log.debug(
@@ -75,6 +103,7 @@ class ReleaseExecutor:
                     pkg_plan.target.package_name or "package",
                 )
                 continue
+
             adapter = _get_adapter(self.registry, pkg_plan.target.language)
             version_str = str(pkg_plan.resolved_version.next)
             log.info(
@@ -85,6 +114,12 @@ class ReleaseExecutor:
             adapter.update_manifest_version(pkg_plan.target, version_str)
 
     def _commit_release(self, plan: ReleasePlan, git: GitRepository) -> str:
+        """Create a release commit or keep HEAD when manifests are unchanged.
+
+        Args:
+            plan: Active release plan.
+            git: Repository handle for the same repo_root as the plan.
+        """
         if plan.has_manifest_updates:
             log.info("Committing manifest updates")
             return git.commit_all(plan.commit_message)
@@ -92,6 +127,12 @@ class ReleaseExecutor:
         return git.rev_parse("HEAD")
 
     def _create_tags(self, plan: ReleasePlan, git: GitRepository) -> None:
+        """Create annotated tags for every planned tag name.
+
+        Args:
+            plan: Active release plan.
+            git: Repository handle for the same repo_root as the plan.
+        """
         tag_messages = build_tag_messages(plan.packages)
         for tag_name in plan.tag_names:
             message = tag_messages.get(tag_name, f"Release {tag_name}")
@@ -101,6 +142,12 @@ class ReleaseExecutor:
     def _push_release(
         self, plan: ReleasePlan, git: GitRepository
     ) -> list[str]:
+        """Push the current branch and release tags to each configured remote.
+
+        Args:
+            plan: Active release plan.
+            git: Repository handle for the same repo_root as the plan.
+        """
         branch = git.get_current_branch()
         pushed = []
         for remote in plan.remotes:
@@ -112,6 +159,11 @@ class ReleaseExecutor:
         return pushed
 
     def _dry_run_result(self, plan: ReleasePlan) -> ReleaseResult:
+        """Build a successful result describing actions that would run.
+
+        Args:
+            plan: Dry-run release plan.
+        """
         log.info("[dry-run] Would create tags: %s", plan.tag_names)
         log.info("[dry-run] Would push to remotes: %s", plan.remotes)
         for pkg_plan in plan.packages:

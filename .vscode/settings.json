@@ -5,6 +5,7 @@
         "corelib",
         "dataclasses",
         "distlift",
+        "pycache",
         "pypa",
         "pypi",
         "pyproject",

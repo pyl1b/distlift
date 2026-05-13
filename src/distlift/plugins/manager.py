@@ -1,3 +1,5 @@
+"""Coordinate discovery, loading, and registration of distlift plugins."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -20,6 +22,16 @@ log = get_logger(__name__)
 
 @attrs.define
 class PluginLoadRequest:
+    """Inputs controlling which plugins are loaded and how they override.
+
+    Attributes:
+        plugin_paths: Explicit ``.py`` files or package directories to load.
+        plugin_directories: Directories scanned for additional plugins.
+        disable_environment_plugins: Skip entry-point discovery when True.
+        disable_builtin_plugins: Skip built-in plugins when True.
+        allow_plugin_override: Forwarded to ``PluginRegistry.allow_override``.
+    """
+
     plugin_paths: list[Path] = attrs.Factory(list)
     plugin_directories: list[Path] = attrs.Factory(list)
     disable_environment_plugins: bool = False
@@ -29,7 +41,18 @@ class PluginLoadRequest:
 
 @attrs.define
 class PluginManager:
+    """Builds a ``PluginRegistry`` from built-ins, environment, and paths.
+
+    Attributes:
+        (none; each ``build_registry`` call is independent.)
+    """
+
     def build_registry(self, request: PluginLoadRequest) -> PluginRegistry:
+        """Discover and register plugins according to ``request``.
+
+        Args:
+            request: Load flags and explicit plugin locations.
+        """
         registry = PluginRegistry(allow_override=request.allow_plugin_override)
 
         all_plugins: list[DistliftPlugin] = []
@@ -58,21 +81,29 @@ class PluginManager:
                     "Plugin '%s' failed to register: %s",
                     plugin.get_name(),
                     exc,
+                    exc_info=True,
                 )
 
         return registry
 
     def load_builtin_plugins(self) -> list[DistliftPlugin]:
+        """Return built-in plugin instances (Git, Python, JavaScript)."""
         from distlift.plugins.builtins import build_builtin_plugins
 
         return build_builtin_plugins()
 
     def load_environment_plugins(self) -> list[DistliftPlugin]:
+        """Load plugins from the ``distlift.plugins`` entry point group."""
         candidates = discover_entry_point_plugins()
         return load_plugins(candidates)
 
     def load_explicit_plugins(
         self, paths: Sequence[Path]
     ) -> list[DistliftPlugin]:
+        """Load plugins from explicit filesystem paths.
+
+        Args:
+            paths: ``.py`` files or package directories.
+        """
         candidates = discover_plugins_from_paths(paths)
         return load_plugins(candidates)
