@@ -66,8 +66,13 @@ class MonorepoReleaseRequest:
     Attributes:
         repo_root: Repository root passed to Git and discovery.
         config: Fully merged resolved configuration including monorepo
-            package declarations.
-        default_bump: Bump applied to each selected package when not pinned.
+            package
+            declarations.
+        default_bump: Bump applied to each selected package when
+            ``explicit_version`` is unset.
+        explicit_version: When set, every selected package releases this exact
+            version (subject to its ``version_format``); ``default_bump`` is
+            then ignored.
         selected_packages: Optional subset of package names to consider.
         all_changed: When True, include only packages with commits since their
             last tag; when False, use selection or all declared packages.
@@ -80,6 +85,7 @@ class MonorepoReleaseRequest:
     repo_root: Path
     config: ResolvedConfig
     default_bump: BumpKind = BumpKind.PATCH
+    explicit_version: str | None = None
     selected_packages: list[str] = attrs.Factory(list)
     all_changed: bool = True
     dry_run: bool = False

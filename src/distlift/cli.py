@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -32,8 +33,10 @@ app = typer.Typer(
     name="distlift",
     help=(
         "Release orchestrator for Python and JavaScript packages. "
-        "With no subcommand, bumps patch, updates manifests, commits, tags, "
-        "and pushes. Use --build or --publish to add distribution steps."
+        "With no subcommand, bumps patch by default; use --major/--minor/"
+        "--patch/--version for a different release. Updates manifests, "
+        "commits, tags, and pushes. Use --build or --publish to add "
+        "distribution steps."
     ),
 )
 release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
@@ -44,6 +47,68 @@ app.add_typer(release_app, name="release")
 app.add_typer(config_app, name="config")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(changelog_app, name="changelog")
+
+
+def _cli_at_most_one_version_selector(
+    major: bool,
+    minor: bool,
+    patch: bool,
+    version: str | None,
+    *,
+    cmd_label: str,
+) -> None:
+    """Exit with an error when more than one version selector flag is set.
+
+    Args:
+        major: Whether ``--major`` was passed.
+        minor: Whether ``--minor`` was passed.
+        patch: Whether ``--patch`` was passed.
+        version: Value of ``--version`` when set.
+        cmd_label: Command name printed in the error message.
+    """
+    n_selectors = sum([major, minor, patch, version is not None])
+
+    if n_selectors > 1:
+        typer.echo(
+            f"{cmd_label}: use at most one of --major, --minor, --patch, "
+            "or --version.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
+def _bump_kind_from_bool_flags(
+    major: bool,
+    minor: bool,
+    patch: bool,
+) -> BumpKind | None:
+    """Map mutually exclusive bump flags to a ``BumpKind`` when one is set.
+
+    Args:
+        major: Whether ``--major`` was passed.
+        minor: Whether ``--minor`` was passed.
+        patch: Whether ``--patch`` was passed.
+    """
+    if major:
+        return BumpKind.MAJOR
+    if minor:
+        return BumpKind.MINOR
+    if patch:
+        return BumpKind.PATCH
+
+    return None
+
+
+def _stdin_is_interactive() -> bool:
+    """Return True when ``stdin`` looks like an interactive terminal.
+
+    Args:
+        None
+
+    Returns:
+        Whether ``sys.stdin.isatty()`` is true for the current process.
+    """
+    return sys.stdin.isatty()
 
 
 @app.callback(invoke_without_command=True)
@@ -97,13 +162,26 @@ def distlift_main_callback(
             ),
         ),
     ] = False,
+    major: Annotated[
+        bool, typer.Option("--major", help="Bump major version")
+    ] = False,
+    minor: Annotated[
+        bool, typer.Option("--minor", help="Bump minor version")
+    ] = False,
+    patch: Annotated[
+        bool, typer.Option("--patch", help="Bump patch version")
+    ] = False,
+    version: Annotated[
+        str | None,
+        typer.Option("--version", "-v", help="Set explicit version"),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[
         Path,
         typer.Option("--repo-root", help="Repository root"),
     ] = Path("."),
 ) -> None:
-    """Distlift CLI entry; no subcommand runs default patch release flow.
+    """Distlift CLI entry; no subcommand runs the default release flow.
 
     Args:
         ctx: Typer invocation context (used to detect bare ``distlift`` runs).
@@ -114,11 +192,25 @@ def distlift_main_callback(
         no_changelog: When ``True``, skip changelog planning for this release.
         no_changelog_editor: When ``True``, skip interactive changelog editing
             before writes.
+        major: When ``True``, bump the major version.
+        minor: When ``True``, bump the minor version.
+        patch: When ``True``, bump the patch version.
+        version: Optional explicit version (mutually exclusive with bump flags).
         verbose: When ``True``, enable verbose logging for this process.
         repo_root: Filesystem path to the repository root directory.
     """
     if ctx.invoked_subcommand is not None:
         return
+
+    _cli_at_most_one_version_selector(
+        major,
+        minor,
+        patch,
+        version,
+        cmd_label="distlift",
+    )
+    flag_bump = _bump_kind_from_bool_flags(major, minor, patch)
+    explicit_ver = version
 
     configure_logging(verbose)
     application = DistliftApplication()
@@ -141,6 +233,8 @@ def distlift_main_callback(
         publish=publish,
         skip_changelog=no_changelog,
         skip_changelog_editor=no_changelog_editor,
+        bump=flag_bump,
+        explicit_version=explicit_ver,
     )
 
     if not release_result.success:
@@ -391,14 +485,37 @@ def release_simple_command(
 def release_monorepo_command(
     all_changed: Annotated[
         bool,
-        typer.Option("--all-changed", help="Release all changed packages"),
-    ] = False,
+        typer.Option(
+            "--all-changed/--all-packages",
+            help=(
+                "Release only packages with commits since their last tag "
+                "(default). Use --all-packages to release every package."
+            ),
+        ),
+    ] = True,
     package: Annotated[
         list[str] | None,
         typer.Option("--package", "-p", help="Specific package name(s)"),
     ] = None,
+    major: Annotated[
+        bool, typer.Option("--major", help="Bump major version")
+    ] = False,
+    minor: Annotated[
+        bool, typer.Option("--minor", help="Bump minor version")
+    ] = False,
+    patch: Annotated[
+        bool, typer.Option("--patch", help="Bump patch version")
+    ] = False,
+    version: Annotated[
+        str | None,
+        typer.Option("--version", "-v", help="Set the same explicit version"),
+    ] = None,
     default_bump: Annotated[
-        str, typer.Option("--default-bump", help="Default bump kind")
+        str,
+        typer.Option(
+            "--default-bump",
+            help="Bump kind when no --major/--minor/--patch/--version",
+        ),
     ] = "patch",
     config_path: Annotated[Path | None, typer.Option("--config")] = None,
     remote: Annotated[list[str] | None, typer.Option("--remote")] = None,
@@ -419,11 +536,17 @@ def release_monorepo_command(
     """Run a monorepo (multi-package) release.
 
     Args:
-        all_changed: When ``True``, include every package with changes since
-            its last tag.
+        all_changed: When ``True`` (default), include only packages with
+            commits since their last tag. Pass ``--all-packages`` to release
+            every configured package regardless of changes.
         package: Optional explicit package names to include in this release.
-        default_bump: Default ``BumpKind`` string when a package needs a bump
-            without an explicit selector.
+        major: When ``True``, bump major for each selected package.
+        minor: When ``True``, bump minor for each selected package.
+        patch: When ``True``, bump patch for each selected package.
+        version: When set, every selected package uses this exact next
+            version (subject to its version format).
+        default_bump: ``BumpKind`` string used when none of the bump/version
+            flags are passed.
         config_path: Optional extra TOML config path.
         remote: Optional Git remote names for push operations.
         dry_run: When ``True``, plan the release without mutating Git state.
@@ -431,11 +554,35 @@ def release_monorepo_command(
         verbose: When ``True``, enable verbose logging.
         repo_root: Repository root directory path.
     """
-    try:
-        bump_kind = BumpKind(default_bump)
-    except ValueError:
-        typer.echo(f"Invalid bump kind: {default_bump}", err=True)
-        raise typer.Exit(1)
+    _cli_at_most_one_version_selector(
+        major,
+        minor,
+        patch,
+        version,
+        cmd_label="distlift release monorepo",
+    )
+    flag_bump = _bump_kind_from_bool_flags(major, minor, patch)
+    explicit_version = version
+
+    if explicit_version is not None and _stdin_is_interactive():
+        msg = (
+            f"This will set the next version to {explicit_version} for every "
+            "package in this release. Continue?"
+        )
+        if not typer.confirm(msg, default=False):
+            typer.echo("Cancelled.", err=True)
+            raise typer.Exit(1)
+
+    if explicit_version is not None:
+        bump_kind = BumpKind.PATCH
+    elif flag_bump is not None:
+        bump_kind = flag_bump
+    else:
+        try:
+            bump_kind = BumpKind(default_bump)
+        except ValueError:
+            typer.echo(f"Invalid bump kind: {default_bump}", err=True)
+            raise typer.Exit(1)
 
     application, config = _resolve_app_config(
         repo_root.resolve(),
@@ -458,6 +605,7 @@ def release_monorepo_command(
         repo_root=repo_root.resolve(),
         config=config,
         default_bump=bump_kind,
+        explicit_version=explicit_version,
         selected_packages=list(package) if package else [],
         all_changed=all_changed,
         dry_run=dry_run,

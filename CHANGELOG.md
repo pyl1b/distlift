@@ -10,11 +10,18 @@
 
 - Commands to create and edit the repo config file.
 - Simple packages list in monorepo config (path only, derive name).
+- Bare ``distlift`` supports ``--major``, ``--minor``, ``--patch``, and
+  ``--version`` / ``-v`` (use at most one; when none are given, behavior is
+  unchanged and the release is a patch bump).
+- ``distlift release monorepo`` supports the same bump and explicit version
+  flags. ``--default-bump`` is used only when none of those flags are set.
+  ``--version`` applies one next version to every package in that release; on
+  an interactive terminal distlift asks for confirmation first.
 
 ### Changed
 
- - how to deal with GPG signing when the tests run on a local computer
- - add patch, minor, major, version to main command as in `distlift release`
+- How to deal with GPG signing when the tests run on a local computer.
+- By default we now publish only packages with changes in a monorepo.
 
 ## [0.1.2] - 2026-05-13
 

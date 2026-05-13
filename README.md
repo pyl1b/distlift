@@ -51,6 +51,11 @@ last part of the version (e.g. 1.0.**4** → 1.0.**5**), updates your manifest
 (such as `pyproject.toml` or `package.json`), can update `CHANGELOG.md` when
 that is enabled, then commits, tags, and pushes according to your settings.
 
+You can pass **one** of these on the same command instead: `--major`,
+`--minor`, `--patch`, or `--version` / `-v` with an exact version (for example
+`distlift --minor` or `distlift --version 2.0.0`). You cannot combine two of
+them on one run.
+
 **Practice run (nothing is written to Git):**
 
 ```text
@@ -106,9 +111,10 @@ distlift --repo-root "C:\path\to\your\repo"
 
 ## Choosing how big the version jump is
 
-When you want control over **major**, **minor**, or **patch** (or an exact
-version), use the **simple release** command instead of the bare `distlift`
-shortcut:
+The bare `distlift` shortcut (see above) accepts `--major`, `--minor`,
+`--patch`, or `--version` / `-v` the same way as `distlift release simple`.
+
+When you prefer the explicit subcommand, use:
 
 ```text
 distlift release simple --patch
@@ -117,8 +123,8 @@ distlift release simple --major
 distlift release simple --version 2.0.0
 ```
 
-You must pick **exactly one** of those version options. Add `--dry-run` anytime
-to rehearse.
+You must pick **exactly one** of those version options for `release simple`.
+Add `--dry-run` anytime to rehearse.
 
 ## Monorepos (several packages in one repository)
 
@@ -135,10 +141,17 @@ or release specific names:
 distlift release monorepo --package my-lib --package my-app
 ```
 
-There is a `--default-bump` option for the usual bump size when the tool must
-guess. Again, `--dry-run` is your friend.
+You can pass **`--major`**, **`--minor`**, **`--patch`**, or **`--version` /
+`-v`** on `release monorepo` as well (at most one per run). If you pass none
+of these, **`--default-bump`** controls the bump kind (it defaults to `patch`).
 
-## Changelog commands
+**Unified version:** `--version 2.0.0` sets that **same** next version on
+**every package included in that release** (still respecting each package’s
+version format). On an interactive terminal, distlift asks you to confirm
+before continuing. In non-interactive environments (typical CI), no prompt is
+shown.
+
+Add `--dry-run` to preview what would happen without writing to Git.
 
 distlift can maintain a **Keep a Changelog**-style `CHANGELOG.md` using your
 Git history (and conventional commit messages when enabled).

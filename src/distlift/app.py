@@ -136,13 +136,19 @@ class DistliftApplication:
         publish: bool,
         skip_changelog: bool = False,
         skip_changelog_editor: bool = False,
+        bump: BumpKind | None = None,
+        explicit_version: str | None = None,
         registry: PluginRegistry | None = None,
     ) -> tuple[ReleaseResult, PublishRunResult | None]:
-        """Run patch release plus optional artifact build or publish.
+        """Run release plus optional artifact build or publish.
 
-        Simple mode bumps the patch level. Monorepo mode uses the same
-        selection rules as ``distlift release monorepo`` without
-        ``--all-changed`` or ``--package`` (every managed package is included).
+        With ``bump`` and ``explicit_version`` unset, a **patch** bump is used.
+        Otherwise ``explicit_version`` selects an exact next version, or
+        ``bump`` selects the semver component to increment.
+
+        Simple mode targets one package. Monorepo mode uses the same selection
+        rules as ``distlift release monorepo`` without ``--all-changed`` or
+        ``--package`` (every managed package is included).
 
         Args:
             repo_root: Repository root directory path.
@@ -157,6 +163,8 @@ class DistliftApplication:
                 run.
             skip_changelog_editor: When ``True``, skip interactive changelog
                 entry editing before writes.
+            bump: Optional bump kind when ``explicit_version`` is unset.
+            explicit_version: Optional exact version for the next release.
             registry: Optional pre-built ``PluginRegistry``; when omitted, a
                 default registry is built from ``config``.
 
@@ -170,12 +178,19 @@ class DistliftApplication:
 
         root = repo_root.resolve()
 
+        # Default to patch when the caller passes no version selector
+        eff_bump = (
+            None if explicit_version is not None else (bump or BumpKind.PATCH)
+        )
+        eff_explicit = explicit_version
+
         # Branch between monorepo and simple release planning and execution
         if config.mode == ReleaseMode.MONOREPO:
             monorepo_req = MonorepoReleaseRequest(
                 repo_root=root,
                 config=config,
-                default_bump=BumpKind.PATCH,
+                default_bump=eff_bump or BumpKind.PATCH,
+                explicit_version=eff_explicit,
                 selected_packages=[],
                 all_changed=False,
                 dry_run=dry_run,
@@ -189,8 +204,8 @@ class DistliftApplication:
             simple_req = SimpleReleaseRequest(
                 repo_root=root,
                 config=config,
-                bump=BumpKind.PATCH,
-                explicit_version=None,
+                bump=eff_bump,
+                explicit_version=eff_explicit,
                 dry_run=dry_run,
                 skip_changelog=skip_changelog,
                 skip_changelog_editor=skip_changelog_editor,

@@ -9,6 +9,7 @@ from distlift.app import DistliftApplication
 from distlift.cli import app
 from distlift.config import files as files_module
 from distlift.config.files import STUB_CONFIG_CONTENT
+from distlift.config.models import BumpKind
 from distlift.editor import EDITOR_ENV_VARS
 from distlift.publish.models import PublishRunResult
 from distlift.release.models import ReleaseResult
@@ -61,6 +62,8 @@ class TestCLI:
             publish: bool,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
+            bump: object | None = None,
+            explicit_version: str | None = None,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["repo_root"] = repo_root
@@ -69,6 +72,8 @@ class TestCLI:
             captured["publish"] = publish
             captured["skip_changelog"] = skip_changelog
             captured["skip_changelog_editor"] = skip_changelog_editor
+            captured["bump"] = bump
+            captured["explicit_version"] = explicit_version
             return (
                 ReleaseResult(
                     success=True,
@@ -93,7 +98,149 @@ class TestCLI:
         assert captured.get("skip_changelog") is False
         assert captured.get("skip_changelog_editor") is False
         assert captured["repo_root"] == tmp_python_project.resolve()
+        assert captured.get("bump") is None
+        assert captured.get("explicit_version") is None
         assert "v0.2.2" in result.output
+
+    def test_no_subcommand_rejects_two_version_selectors(
+        self, tmp_python_project: Path
+    ) -> None:
+        """At most one of ``--major``/``--minor``/``--patch``/``--version``."""
+
+        result = runner.invoke(
+            app,
+            [
+                "--repo-root",
+                str(tmp_python_project),
+                "--major",
+                "--minor",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_no_subcommand_forwards_major_bump(
+        self, tmp_python_project: Path, monkeypatch
+    ) -> None:
+        """``--major`` is passed through to ``run_default_command``."""
+
+        captured: dict[str, object] = {}
+
+        def fake_run_default_command(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            dry_run: bool,
+            build: bool,
+            publish: bool,
+            skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
+            bump: BumpKind | None = None,
+            explicit_version: str | None = None,
+            registry: object | None = None,
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            captured["bump"] = bump
+            captured["explicit_version"] = explicit_version
+            return ReleaseResult(
+                success=True, dry_run=dry_run, tag_names=[]
+            ), None
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
+        )
+        runner.invoke(
+            app,
+            ["--repo-root", str(tmp_python_project), "--major"],
+        )
+        assert captured["bump"] == BumpKind.MAJOR
+        assert captured["explicit_version"] is None
+
+    def test_no_subcommand_forwards_explicit_version(
+        self, tmp_python_project: Path, monkeypatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run_default_command(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            dry_run: bool,
+            build: bool,
+            publish: bool,
+            skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
+            bump: BumpKind | None = None,
+            explicit_version: str | None = None,
+            registry: object | None = None,
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            captured["bump"] = bump
+            captured["explicit_version"] = explicit_version
+            return ReleaseResult(
+                success=True, dry_run=dry_run, tag_names=[]
+            ), None
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
+        )
+        runner.invoke(
+            app,
+            [
+                "--repo-root",
+                str(tmp_python_project),
+                "--version",
+                "2.0.0",
+            ],
+        )
+        assert captured["bump"] is None
+        assert captured["explicit_version"] == "2.0.0"
+
+    def test_release_monorepo_two_selectors_fail(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "release",
+                "monorepo",
+                "--repo-root",
+                str(tmp_path),
+                "--patch",
+                "--major",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_release_monorepo_version_confirm_decline_exits(
+        self, tmp_git_repo: Path, monkeypatch
+    ) -> None:
+        """Declining the unified-version prompt aborts before release."""
+
+        import distlift.cli as cli_mod
+
+        monkeypatch.setattr(cli_mod, "_stdin_is_interactive", lambda: True)
+
+        def decline(*args, **kwargs) -> bool:  # noqa: ANN002
+            return False
+
+        monkeypatch.setattr(cli_mod.typer, "confirm", decline)
+
+        result = runner.invoke(
+            app,
+            [
+                "release",
+                "monorepo",
+                "--repo-root",
+                str(tmp_git_repo),
+                "--version",
+                "9.9.9",
+            ],
+        )
+        assert result.exit_code == 1
+        combined = (result.stdout or "") + (result.stderr or "")
+        assert "Cancelled" in combined
 
     def test_no_subcommand_forwards_build_and_publish_flags(
         self, tmp_python_project: Path, monkeypatch
@@ -110,6 +257,8 @@ class TestCLI:
             publish: bool,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
+            bump: object | None = None,
+            explicit_version: str | None = None,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["build"] = build
@@ -158,6 +307,8 @@ class TestCLI:
             publish: bool,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
+            bump: object | None = None,
+            explicit_version: str | None = None,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["skip_changelog_editor"] = skip_changelog_editor

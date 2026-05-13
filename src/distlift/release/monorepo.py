@@ -173,8 +173,10 @@ def compute_monorepo_release_plan(
         )
         resolved = resolve_next_version(
             current=current,
-            bump=request.default_bump,
-            explicit=None,
+            bump=request.default_bump
+            if request.explicit_version is None
+            else None,
+            explicit=request.explicit_version,
             fmt=fmt,
             template=template,
             package_name=pkg.name,
