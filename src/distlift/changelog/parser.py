@@ -12,8 +12,10 @@ from distlift.changelog.models import (
 from distlift.errors import ChangelogError
 
 _FOOTER_LINK_RE = re.compile(r"^\[([^\]]+)\]:\s*(.+)$")
+# Optional ``\`` before ``[``: some Markdown tooling escapes the bracket so
+# the line is stored as ``## \[1.0.0]`` while previews still show ``[1.0.0]``.
 _RELEASE_HEAD_RE = re.compile(
-    r"^## \[(?P<ver>[^\]]+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}))?$"
+    r"^## \\?\[(?P<ver>[^\]]+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}))?$"
 )
 
 

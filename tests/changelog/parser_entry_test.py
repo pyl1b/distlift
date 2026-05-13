@@ -29,6 +29,14 @@ class TestParseReleaseEntryMarkdown:
 
         assert entry.version_label == "0.1.0"
 
+    def test_accepts_markdown_escaped_open_bracket_in_heading(self) -> None:
+        """Accept escaped ``[`` after ``##`` (Markdown tooling / editors)."""
+        text = "## \\[0.1.2] - 2026-05-13\n\n### Added\n\n- x\n"
+        entry = parse_release_entry_markdown(text)
+
+        assert entry.version_label == "0.1.2"
+        assert entry.date_iso == "2026-05-13"
+
     def test_rejects_multiple_release_headings(self) -> None:
         """Fragments must contain exactly one ``##`` release section."""
         text = "## [1.0.0]\n\n### Added\n\n- a\n\n## [2.0.0]\n"
