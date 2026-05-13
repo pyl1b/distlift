@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from distlift.config.models import (
+    ChangelogConfig,
     Language,
     ManagedPackageConfig,
     MonorepoConfig,
@@ -92,5 +93,25 @@ class TestValidateResolvedConfig:
         )
 
         # Validate that duplicate package names are rejected.
+        with pytest.raises(ConfigurationError):
+            validate_resolved_config(config)
+
+    def test_changelog_compare_template_requires_both_refs(self) -> None:
+        """Reject malformed changelog compare URL templates."""
+
+        bad = ChangelogConfig(
+            compare_url_template="https://example.com/{prev}",
+        )
+        config = _base_config(changelog=bad)
+
+        with pytest.raises(ConfigurationError):
+            validate_resolved_config(config)
+
+    def test_changelog_commit_mapping_must_be_known_sections(self) -> None:
+        """Reject unknown Keep a Changelog section titles."""
+
+        bad = ChangelogConfig(commit_mapping={"feat": "Nope"})
+        config = _base_config(changelog=bad)
+
         with pytest.raises(ConfigurationError):
             validate_resolved_config(config)

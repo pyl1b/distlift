@@ -71,3 +71,11 @@ class PluginError(DistliftError):
     Attributes:
         None beyond the attributes inherited from ``Exception``.
     """
+
+
+class ChangelogError(DistliftError):
+    """Failed to parse, format, or write a changelog document.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """

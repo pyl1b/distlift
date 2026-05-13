@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import attrs
 
+from distlift.changelog.builder import render_inserted_entry_preview
+from distlift.changelog.writer import write_changelog_document
 from distlift.config.models import Language
 from distlift.languages.base import ProjectAdapter
 from distlift.logging_utils import get_logger
@@ -66,6 +68,7 @@ class ReleaseExecutor:
 
         # Apply manifest writes, commit, tag, and push; any failure aborts
         try:
+            self._apply_changelog_updates(plan)
             self._apply_manifest_updates(plan)
             commit_sha = self._commit_release(plan, git)
             self._create_tags(plan, git)
@@ -88,6 +91,24 @@ class ReleaseExecutor:
                 dry_run=False,
                 tag_names=[],
                 error=str(exc),
+            )
+
+    def _apply_changelog_updates(self, plan: ReleasePlan) -> None:
+        """Write changelog documents described by the plan.
+
+        Args:
+            plan: Release plan possibly containing per-package changelog plans.
+        """
+        for pkg_plan in plan.packages:
+            update_plan = pkg_plan.changelog_update
+
+            if update_plan is None:
+                continue
+
+            log.info("Writing changelog %s", update_plan.path)
+            write_changelog_document(
+                update_plan.path,
+                update_plan.new_document,
             )
 
     def _apply_manifest_updates(self, plan: ReleasePlan) -> None:
@@ -120,10 +141,12 @@ class ReleaseExecutor:
             plan: Active release plan.
             git: Repository handle for the same repo_root as the plan.
         """
-        if plan.has_manifest_updates:
-            log.info("Committing manifest updates")
+        if plan.has_manifest_updates or plan.has_changelog_updates:
+            log.info("Committing release changes")
             return git.commit_all(plan.commit_message)
-        log.debug("No manifest updates; skipping commit")
+
+        log.debug("No manifest or changelog updates; skipping commit")
+
         return git.rev_parse("HEAD")
 
     def _create_tags(self, plan: ReleasePlan, git: GitRepository) -> None:
@@ -173,6 +196,19 @@ class ReleaseExecutor:
                     pkg_plan.target.manifest_path,
                     str(pkg_plan.resolved_version.next),
                 )
+
+            update_plan = pkg_plan.changelog_update
+
+            if update_plan is None:
+                continue
+
+            log.info("[dry-run] Would update changelog %s", update_plan.path)
+
+            log.log(
+                1,
+                "[dry-run] Changelog entry preview:\n%s",
+                render_inserted_entry_preview(update_plan),
+            )
         return ReleaseResult(
             success=True,
             dry_run=True,

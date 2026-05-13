@@ -4,6 +4,7 @@ import attrs
 
 from distlift.errors import PluginError, UnsupportedLanguageError
 from distlift.plugins.base import (
+    ChangelogPlugin,
     GitBackendPlugin,
     LanguagePlugin,
     ManifestPlugin,
@@ -39,6 +40,7 @@ class PluginRegistry:
         _publish_plugins: Map of language id to registered publish plugin.
         _version_source_plugins: Map of version source name to plugin.
         _git_backend: Optional registered Git backend plugin.
+        _changelog_plugin: Optional registered changelog formatter plugin.
     """
 
     allow_override: bool = True
@@ -48,6 +50,7 @@ class PluginRegistry:
     _publish_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
     _version_source_plugins: dict[str, RegisteredPlugin] = attrs.Factory(dict)
     _git_backend: RegisteredPlugin | None = None
+    _changelog_plugin: RegisteredPlugin | None = None
 
     def register_language_plugin(
         self, plugin: LanguagePlugin, source: str = "<unknown>"
@@ -167,6 +170,30 @@ class PluginRegistry:
             overrides=self._git_backend.source if self._git_backend else None,
         )
 
+    def register_changelog_plugin(
+        self, plugin: ChangelogPlugin, source: str = "<unknown>"
+    ) -> None:
+        """Register or replace the changelog formatter plugin.
+
+        Args:
+            plugin: Changelog plugin instance to register.
+            source: Provenance label for diagnostics.
+        """
+        if self._changelog_plugin is not None and not self.allow_override:
+            raise PluginError(
+                "Changelog plugin already registered; overrides are disabled"
+            )
+
+        self._changelog_plugin = RegisteredPlugin(
+            plugin=plugin,
+            source=source,
+            overrides=(
+                self._changelog_plugin.source
+                if self._changelog_plugin
+                else None
+            ),
+        )
+
     def get_language_plugin(self, language: str) -> LanguagePlugin:
         """Return the registered language plugin for ``language``.
 
@@ -218,6 +245,17 @@ class PluginRegistry:
             raise PluginError("No Git backend plugin registered")
         return self._git_backend.plugin  # type: ignore[return-value]
 
+    def get_changelog_plugin(self) -> ChangelogPlugin | None:
+        """Return the registered changelog plugin when present.
+
+        Returns:
+            Registered changelog plugin or ``None`` when unset.
+        """
+        if self._changelog_plugin is None:
+            return None
+
+        return self._changelog_plugin.plugin  # type: ignore[return-value]
+
     def list_all(self) -> list[RegisteredPlugin]:
         """Return every ``RegisteredPlugin`` held in this registry."""
         result: list[RegisteredPlugin] = []
@@ -227,6 +265,8 @@ class PluginRegistry:
         result.extend(self._version_source_plugins.values())
         if self._git_backend:
             result.append(self._git_backend)
+        if self._changelog_plugin:
+            result.append(self._changelog_plugin)
         return result
 
     def has_language(self, language: str) -> bool:

@@ -20,6 +20,37 @@ from distlift.config.models import (
 )
 from distlift.constants import ENV_PREFIX, PYPROJECT_TOOL_KEY
 
+_CHANGELOG_ALLOWED_KEYS = frozenset(
+    {
+        "enabled",
+        "path",
+        "title",
+        "header_text",
+        "date_format",
+        "include_unreleased_section",
+        "compare_url_template",
+        "skip_commit_types",
+        "commit_mapping",
+        "default_section",
+    }
+)
+
+
+def _changelog_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
+    """Return only recognized changelog keys from a parsed mapping.
+
+    Args:
+        mapping: Value read from a ``changelog`` table or similar structure.
+    """
+    if not isinstance(mapping, dict):
+        return {}
+
+    return {
+        str(k): v
+        for k, v in mapping.items()
+        if str(k) in _CHANGELOG_ALLOWED_KEYS
+    }
+
 
 def load_toml_config(path: Path) -> dict[str, Any]:
     """Parse a TOML file into a plain dictionary structure.
@@ -105,6 +136,23 @@ def load_environment_config(
     if plugins:
         result["plugins"] = plugins
 
+    changelog_env: dict[str, Any] = {}
+
+    if v := _get("CHANGELOG_ENABLED"):
+        changelog_env["enabled"] = v.lower() in ("1", "true", "yes")
+
+    if v := _get("CHANGELOG_PATH"):
+        changelog_env["path"] = v
+
+    if v := _get("CHANGELOG_COMPARE_URL_TEMPLATE"):
+        changelog_env["compare_url_template"] = v
+
+    if v := _get("CHANGELOG_TITLE"):
+        changelog_env["title"] = v
+
+    if changelog_env:
+        result["changelog"] = changelog_env
+
     return result
 
 
@@ -174,6 +222,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
                 version_source=VersionSource(
                     pkg.get("version_source", "manifest")
                 ),
+                changelog_path=pkg.get("changelog_path"),
             )
         )
 
@@ -181,6 +230,8 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         enabled=monorepo_data.get("enabled", False),
         packages=packages,
     )
+
+    changelog_overlay = _changelog_overlay_from_mapping(data.get("changelog"))
 
     return RawConfig(
         language=language,
@@ -193,6 +244,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         manifest_path=manifest_path,
         plugins=plugin_config,
         monorepo=monorepo_config,
+        changelog_overlay=changelog_overlay,
         source=source,
     )
 

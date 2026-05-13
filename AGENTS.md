@@ -19,22 +19,34 @@ src/distlift/
   __init__.py          package version metadata
   __main__.py          python -m distlift entry point
   app.py               DistliftApplication — orchestration boundary between CLI and core
-  cli.py               typer CLI (release simple/monorepo, config show/validate, plugins list)
+  cli.py               typer CLI (release, changelog, config, plugins)
+  cli_changelog.py     ``distlift changelog`` Typer subcommands
   constants.py         ENV_PREFIX, default paths, tag templates, entry-point group name
   errors.py            typed exception hierarchy
   logging_utils.py     configure_logging(), get_logger(), TRACE level (5)
 
   plugins/
-    base.py            abstract plugin interfaces (DistliftPlugin and five capability subclasses)
+    base.py            abstract plugin interfaces (DistliftPlugin and six capability subclasses)
     registry.py        PluginRegistry — holds active implementations, enforces override rules
     discovery.py       discover plugins from entry points, explicit paths, and directories
     loader.py          import plugin modules and instantiate plugin objects
     manager.py         PluginManager — coordinates discovery → loading → registry creation
     builtins.py        build_builtin_plugins() — wires built-in implementations
 
+  changelog/
+    builder.py         assemble changelog update plans from Git history and settings
+    compare_url.py     derive compare URL templates from ``git remote`` URLs
+    conventional.py    conventional-commit parsing for changelog routing
+    formatter.py       render structured changelog models as Markdown
+    git_log.py         collect commits between revisions for changelog builds
+    models.py          changelog document structures and update plans
+    parser.py          parse Keep-a-Changelog Markdown into models
+    plugin.py          KeepAChangelogBuiltinPlugin registration hook
+    writer.py          persist formatted changelog documents
+
   config/
-    models.py          enums (Language, ReleaseMode, VersionFormat, BumpKind, VersionSource)
-                       and attrs models (RawConfig, ResolvedConfig, PluginConfig, …)
+    models.py          enums … RawConfig (with ``changelog_overlay``), ResolvedConfig,
+                       PluginConfig, ``ChangelogConfig``, …
     discovery.py       locate config files on disk (local, user, system, pyproject embed)
     loader.py          load TOML files and env vars into RawConfig fragments
     merger.py          merge ordered RawConfig layers into ResolvedConfig with source tracing
@@ -66,7 +78,8 @@ src/distlift/
     planner.py         build pure ReleasePlan without side effects
     simple.py          compute_simple_release_plan()
     monorepo.py        compute_monorepo_release_plan()
-    executor.py        ReleaseExecutor — applies manifest updates, commits, tags, pushes
+    changelog_extra.py finalize_plan_with_changelog() attaches per-package changelog plans
+    executor.py        ReleaseExecutor — writes changelogs/manifests, commits, tags, pushes
 
   monorepo/
     discovery.py       load_managed_packages(), resolve_package_manifest_path()
@@ -77,7 +90,7 @@ src/distlift/
     python.py          build_python_distributions(), publish_python_distributions()
     javascript.py      build_javascript_distributions(), publish_javascript_distributions()
 
-tests/                 mirrors src/ structure; 92 tests
+tests/                 mirrors src/ structure; includes ``tests/changelog/``
 ```
 
 ---
@@ -121,7 +134,9 @@ Key environment variables: `DISTLIFT_LANGUAGE`, `DISTLIFT_MODE`,
 `DISTLIFT_REMOTES`, `DISTLIFT_DEFAULT_VERSION`, `DISTLIFT_VERSION_FORMAT`,
 `DISTLIFT_TAG_TEMPLATE`, `DISTLIFT_VERSION_SOURCE`, `DISTLIFT_MANIFEST_PATH`,
 `DISTLIFT_PLUGIN_PATHS`, `DISTLIFT_PLUGIN_DIRS`,
-`DISTLIFT_ENABLE_ENVIRONMENT_PLUGINS`, `DISTLIFT_ENABLE_BUILTIN_PLUGINS`.
+`DISTLIFT_ENABLE_ENVIRONMENT_PLUGINS`, `DISTLIFT_ENABLE_BUILTIN_PLUGINS`,
+`DISTLIFT_CHANGELOG_ENABLED`, `DISTLIFT_CHANGELOG_PATH`,
+`DISTLIFT_CHANGELOG_COMPARE_URL_TEMPLATE`, `DISTLIFT_CHANGELOG_TITLE`.
 
 ---
 
@@ -363,3 +378,9 @@ name = plugin.get_name()
 4. Merge it in `merge_config_layers()` in `config/merger.py`.
 5. Validate it in `config/validators.py` if it has semantic constraints.
 6. Expose it in the `config show` command output in `cli.py`.
+
+Changelog settings use a shallow `[changelog]` table merged into
+`RawConfig.changelog_overlay`. To add a new changelog key, extend
+`_CHANGELOG_ALLOWED_KEYS` and `changelog_from_merged_overlay()` in
+`config/loader.py` / `config/merger.py`, validate when needed in
+`validate_changelog_config()`, and document any `DISTLIFT_CHANGELOG_*` mapping.

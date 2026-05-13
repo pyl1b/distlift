@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import attrs
 
@@ -64,6 +65,61 @@ class BumpKind(StrEnum):
     PATCH = "patch"
 
 
+def _default_changelog_skip_types() -> list[str]:
+    """Return default conventional-commit types skipped from CHANGELOG."""
+    return ["chore", "docs", "style", "test", "ci", "build"]
+
+
+def _default_changelog_commit_mapping() -> dict[str, str]:
+    """Return default mapping from conventional type to Keep a Changelog
+    section.
+    """
+    return {
+        "feat": "Added",
+        "fix": "Fixed",
+        "perf": "Changed",
+        "refactor": "Changed",
+        "deprecate": "Deprecated",
+        "remove": "Removed",
+        "security": "Security",
+    }
+
+
+@attrs.define
+class ChangelogConfig:
+    """Keep a Changelog generation settings merged from configuration layers.
+
+    Attributes:
+        enabled: When True, release runs update CHANGELOG.md where configured.
+        path: Repository-relative path to CHANGELOG.md for simple mode or
+            default.
+        title: Top-level document title for scaffolded changelogs.
+        header_text: Intro paragraphs inserted when initializing a new file.
+        date_format: strftime format for release dates under version headings.
+        include_unreleased_section: When True, maintain an ``[Unreleased]``
+            section between releases.
+        compare_url_template: Compare URL with ``{prev}`` and ``{next}``
+            placeholders; empty triggers detection from ``origin``.
+        skip_commit_types: Conventional commit types omitted from generated
+            lists.
+        commit_mapping: Maps conventional type strings to section titles.
+        default_section: Section title for non-conventional or unknown types.
+    """
+
+    enabled: bool = True
+    path: str = "CHANGELOG.md"
+    title: str = "Changelog"
+    header_text: str = ""
+    date_format: str = "%Y-%m-%d"
+    include_unreleased_section: bool = True
+    compare_url_template: str = ""
+    skip_commit_types: list[str] = attrs.Factory(_default_changelog_skip_types)
+    commit_mapping: dict[str, str] = attrs.Factory(
+        _default_changelog_commit_mapping
+    )
+    default_section: str = "Changed"
+
+
 class VersionSource(StrEnum):
     """Where the current package version is read from before a bump.
 
@@ -89,6 +145,7 @@ class ManagedPackageConfig:
         default_version: Fallback version when none can be resolved.
         tag_template: Optional per-package tag naming template override.
         version_source: Whether to read the version from manifest or tags.
+        changelog_path: Optional override path for this package's CHANGELOG.md.
     """
 
     name: str
@@ -99,6 +156,7 @@ class ManagedPackageConfig:
     default_version: str = DEFAULT_VERSION
     tag_template: str | None = None
     version_source: VersionSource = VersionSource.MANIFEST
+    changelog_path: str | None = None
 
 
 @attrs.define
@@ -148,6 +206,8 @@ class RawConfig:
         manifest_path: Optional explicit manifest path as a string path.
         plugins: Plugin-related fields contributed by this layer.
         monorepo: Monorepo section contributed by this layer.
+        changelog_overlay: Optional shallow overlay dict for ``changelog`` keys
+            from this layer; merged field-by-field across layers.
         source: Human-readable label for the origin of this fragment.
     """
 
@@ -161,6 +221,7 @@ class RawConfig:
     manifest_path: str | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
+    changelog_overlay: dict[str, Any] = attrs.Factory(dict)
     source: str = "<unknown>"
 
 
@@ -180,6 +241,7 @@ class ResolvedConfig:
         manifest_path: Optional absolute manifest path when configured.
         plugins: Effective plugin discovery and override settings.
         monorepo: Effective monorepo enable flag and merged package list.
+        changelog: Effective Keep a Changelog generation settings.
         field_sources: Map of top-level scalar field names to the source
             label of the layer that last set each field.
     """
@@ -194,4 +256,5 @@ class ResolvedConfig:
     manifest_path: Path | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
+    changelog: ChangelogConfig = attrs.Factory(ChangelogConfig)
     field_sources: dict[str, str] = attrs.Factory(dict)

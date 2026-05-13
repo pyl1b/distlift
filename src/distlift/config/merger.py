@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import attrs
 
 from distlift.config.models import (
+    ChangelogConfig,
     ManagedPackageConfig,
     MonorepoConfig,
     PluginConfig,
@@ -23,6 +24,74 @@ from distlift.constants import (
 )
 
 T = TypeVar("T")
+
+
+def changelog_from_merged_overlay(overlay: dict[str, Any]) -> ChangelogConfig:
+    """Build a ``ChangelogConfig`` from merged overlay key-values.
+
+    Args:
+        overlay: Merged mapping of changelog keys from configuration layers.
+    """
+    base = ChangelogConfig()
+
+    if not overlay:
+        return base
+
+    kw: dict[str, Any] = {}
+
+    if "enabled" in overlay:
+        kw["enabled"] = bool(overlay["enabled"])
+
+    if "path" in overlay:
+        kw["path"] = str(overlay["path"])
+
+    if "title" in overlay:
+        kw["title"] = str(overlay["title"])
+
+    if "header_text" in overlay:
+        kw["header_text"] = str(overlay["header_text"])
+
+    if "date_format" in overlay:
+        kw["date_format"] = str(overlay["date_format"])
+
+    if "include_unreleased_section" in overlay:
+        kw["include_unreleased_section"] = bool(
+            overlay["include_unreleased_section"]
+        )
+
+    if "compare_url_template" in overlay:
+        kw["compare_url_template"] = str(overlay["compare_url_template"])
+
+    if "skip_commit_types" in overlay:
+        raw_skip = overlay["skip_commit_types"]
+
+        if isinstance(raw_skip, list):
+            kw["skip_commit_types"] = [str(x) for x in raw_skip]
+
+    if "commit_mapping" in overlay:
+        raw_map = overlay["commit_mapping"]
+
+        if isinstance(raw_map, dict):
+            kw["commit_mapping"] = {str(k): str(v) for k, v in raw_map.items()}
+
+    if "default_section" in overlay:
+        kw["default_section"] = str(overlay["default_section"])
+
+    return attrs.evolve(base, **kw)
+
+
+def merge_changelog_overlays(layers: Sequence[RawConfig]) -> ChangelogConfig:
+    """Merge changelog overlay fragments from all layers (low to high).
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
+    """
+    merged: dict[str, Any] = {}
+
+    for layer in layers:
+        merged.update(layer.changelog_overlay)
+
+    return changelog_from_merged_overlay(merged)
 
 
 def merge_optional_scalar(
@@ -196,6 +265,8 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         packages=list(packages_map.values()),
     )
 
+    changelog_config = merge_changelog_overlays(layers)
+
     return ResolvedConfig(
         language=language,
         mode=mode or ReleaseMode.SIMPLE,
@@ -207,5 +278,6 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         manifest_path=Path(manifest_path_str) if manifest_path_str else None,
         plugins=plugin_config,
         monorepo=monorepo_config,
+        changelog=changelog_config,
         field_sources=field_sources,
     )

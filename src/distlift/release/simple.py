@@ -8,6 +8,7 @@ from distlift.config.models import Language, ResolvedConfig
 from distlift.errors import UnsupportedLanguageError
 from distlift.languages.base import ProjectAdapter
 from distlift.plugins.registry import PluginRegistry
+from distlift.release.changelog_extra import finalize_plan_with_changelog
 from distlift.release.models import (
     ReleasePlan,
     ReleaseTarget,
@@ -115,6 +116,14 @@ def compute_simple_release_plan(
         package_name=target.package_name,
     )
 
-    return plan_simple_release(
+    plan = plan_simple_release(
         target, resolved, request.config, request.dry_run
+    )
+
+    return finalize_plan_with_changelog(
+        plan,
+        git_repo=git,
+        tags=tags,
+        config=request.config,
+        skip_changelog=request.skip_changelog,
     )

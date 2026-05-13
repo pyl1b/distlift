@@ -4,6 +4,7 @@ from pathlib import Path
 
 import attrs
 
+from distlift.changelog.models import ChangelogUpdatePlan
 from distlift.config.models import (
     BumpKind,
     Language,
@@ -44,6 +45,7 @@ class SimpleReleaseRequest:
         bump: Semantic bump to apply when no explicit_version is set.
         explicit_version: When set, this exact version string is used.
         dry_run: When True, planners mark the plan as non-executing.
+        skip_changelog: When True, changelog mutations are not planned.
     """
 
     repo_root: Path
@@ -51,6 +53,7 @@ class SimpleReleaseRequest:
     bump: BumpKind | None = None
     explicit_version: str | None = None
     dry_run: bool = False
+    skip_changelog: bool = False
 
 
 @attrs.define
@@ -66,6 +69,7 @@ class MonorepoReleaseRequest:
         all_changed: When True, include only packages with commits since their
             last tag; when False, use selection or all declared packages.
         dry_run: When True, planners mark the plan as non-executing.
+        skip_changelog: When True, changelog mutations are not planned.
     """
 
     repo_root: Path
@@ -74,6 +78,7 @@ class MonorepoReleaseRequest:
     selected_packages: list[str] = attrs.Factory(list)
     all_changed: bool = True
     dry_run: bool = False
+    skip_changelog: bool = False
 
 
 @attrs.define
@@ -85,11 +90,13 @@ class PackageReleasePlan:
         resolved_version: Current and next versions plus computed tag name.
         update_manifest: When False, manifests are left unchanged (e.g.
             dynamic or tag-only versioning).
+        changelog_update: Optional changelog mutation applied before manifests.
     """
 
     target: ReleaseTarget
     resolved_version: ResolvedVersion
     update_manifest: bool
+    changelog_update: ChangelogUpdatePlan | None = None
 
 
 @attrs.define
@@ -108,6 +115,7 @@ class ReleasePlan:
     Properties:
         has_manifest_updates: True when any package requires a manifest
             version write before tagging.
+        has_changelog_updates: True when any package carries a changelog plan.
     """
 
     mode: ReleaseMode
@@ -121,6 +129,10 @@ class ReleasePlan:
     @property
     def has_manifest_updates(self) -> bool:
         return any(p.update_manifest for p in self.packages)
+
+    @property
+    def has_changelog_updates(self) -> bool:
+        return any(p.changelog_update is not None for p in self.packages)
 
 
 @attrs.define

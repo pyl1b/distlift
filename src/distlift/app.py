@@ -148,6 +148,7 @@ class DistliftApplication:
         dry_run: bool,
         build: bool,
         publish: bool,
+        skip_changelog: bool = False,
         registry: PluginRegistry | None = None,
     ) -> tuple[ReleaseResult, PublishRunResult | None]:
         """Run patch release plus optional artifact build or publish.
@@ -165,6 +166,7 @@ class DistliftApplication:
                 release.
             publish: When ``True``, build and upload after a successful
                 release.
+            skip_changelog: When ``True``, skip changelog planning for this run.
             registry: Optional pre-built ``PluginRegistry``; when omitted, a
                 default registry is built from ``config``.
 
@@ -187,6 +189,7 @@ class DistliftApplication:
                 selected_packages=[],
                 all_changed=False,
                 dry_run=dry_run,
+                skip_changelog=skip_changelog,
             )
             release_result = self.run_monorepo_release(
                 monorepo_req, registry=registry
@@ -198,6 +201,7 @@ class DistliftApplication:
                 bump=BumpKind.PATCH,
                 explicit_version=None,
                 dry_run=dry_run,
+                skip_changelog=skip_changelog,
             )
             release_result = self.run_simple_release(
                 simple_req, registry=registry

@@ -85,3 +85,15 @@ class GitBackendPlugin(DistliftPlugin):
     Attributes:
         (none; a single Git backend replaces subprocess usage when registered.)
     """
+
+
+class ChangelogPlugin(DistliftPlugin):
+    """Plugin that formats changelog documents for releases.
+
+    Attributes:
+        (none; a single changelog plugin formats changelog Markdown.)
+    """
+
+    @abstractmethod
+    def get_format(self) -> str:
+        """Return the changelog format identifier (``keep-a-changelog``)."""

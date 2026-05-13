@@ -66,3 +66,21 @@ class TestMergeConfigLayers:
 
         # Confirm the configured version format is retained.
         assert config.version_format == VersionFormat.MAJOR
+
+    def test_changelog_overlay_merge(self) -> None:
+        """Merge shallow changelog overlay keys across layers."""
+
+        layer1 = RawConfig(
+            changelog_overlay={"path": "A.md"},
+            source="a",
+        )
+
+        layer2 = RawConfig(
+            changelog_overlay={"enabled": False},
+            source="b",
+        )
+
+        config = merge_config_layers([layer1, layer2])
+
+        assert config.changelog.path == "A.md"
+        assert config.changelog.enabled is False

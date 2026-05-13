@@ -52,12 +52,14 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            skip_changelog: bool = False,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["repo_root"] = repo_root
             captured["dry_run"] = dry_run
             captured["build"] = build
             captured["publish"] = publish
+            captured["skip_changelog"] = skip_changelog
             return (
                 ReleaseResult(
                     success=True,
@@ -79,6 +81,7 @@ class TestCLI:
         assert captured.get("dry_run") is False
         assert captured.get("build") is False
         assert captured.get("publish") is False
+        assert captured.get("skip_changelog") is False
         assert captured["repo_root"] == tmp_python_project.resolve()
         assert "v0.2.2" in result.output
 
@@ -95,6 +98,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            skip_changelog: bool = False,
             registry: object | None = None,
         ) -> tuple[ReleaseResult, PublishRunResult | None]:
             captured["build"] = build
@@ -124,6 +128,24 @@ class TestCLI:
         )
         assert captured["build"] is True
         assert captured["publish"] is True
+
+    def test_changelog_preview_runs(self, tmp_python_project: Path) -> None:
+        """``distlift changelog preview`` prints a proposed release section."""
+
+        result = runner.invoke(
+            app,
+            [
+                "changelog",
+                "preview",
+                "--repo-root",
+                str(tmp_python_project),
+                "--version",
+                "0.2.0",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "## [" in result.output
 
     def test_explicit_subcommand_skips_default_command(
         self, tmp_path: Path, monkeypatch

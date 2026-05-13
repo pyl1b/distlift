@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 import attrs
 
@@ -14,6 +15,32 @@ from distlift.plugins.base import GitBackendPlugin
 from distlift.plugins.registry import PluginRegistry
 
 log = get_logger(__name__)
+
+_LOG_FIELD_SEP = "\x1f"
+_LOG_RECORD_SEP = "\x1e"
+# ``git log`` separates records with ``\\x1e``; chunks may be joined by ``\\n``.
+# Avoid bare ``str.strip()`` because Python treats ``\\x1f`` as whitespace.
+_RECORD_CHUNK_STRIP_CHARS = "\r\n\t "
+
+
+class GitCommitRecord(NamedTuple):
+    """One commit row parsed from a formatted ``git log`` invocation.
+
+    Attributes:
+        sha_full: Full 40-character hexadecimal object name.
+        sha_short: Abbreviated hash suitable for display.
+        author: Author name string from Git metadata.
+        authored_iso: Strict ISO-like timestamp from ``%ai``.
+        subject: First line of the commit message.
+        body: Remaining commit message lines after the subject.
+    """
+
+    sha_full: str
+    sha_short: str
+    author: str
+    authored_iso: str
+    subject: str
+    body: str
 
 
 @attrs.define
@@ -162,6 +189,99 @@ class GitRepository:
 
         return bool(result.stdout.strip())
 
+    def get_remote_url(self, remote: str = "origin") -> str | None:
+        """Return the configured URL for ``remote``, or None when missing.
+
+        Args:
+            remote: Local remote name (typically ``origin``).
+        """
+        result = self._run(["remote", "get-url", remote], check=False)
+
+        if result.returncode != 0:
+            log.debug(
+                "Could not read URL for remote %r: %s",
+                remote,
+                result.stderr.strip(),
+            )
+
+            return None
+
+        url = result.stdout.strip()
+
+        return url or None
+
+    def list_commits_between(
+        self,
+        revspec: str | None,
+        path: str | None = None,
+    ) -> list[GitCommitRecord]:
+        """Return commits in oldest-first order for a revision range.
+
+        Args:
+            revspec: Two-dot range such as ``tag..HEAD``, or None for full
+                history reachable from ``HEAD``.
+            path: Optional repository-relative path limiting commits.
+        """
+        fmt = (
+            "%H"
+            + _LOG_FIELD_SEP
+            + "%h"
+            + _LOG_FIELD_SEP
+            + "%an"
+            + _LOG_FIELD_SEP
+            + "%ai"
+            + _LOG_FIELD_SEP
+            + "%s"
+            + _LOG_FIELD_SEP
+            + "%b"
+            + _LOG_RECORD_SEP
+        )
+
+        args: list[str] = ["log"]
+
+        if revspec:
+            args.append(revspec)
+        else:
+            args.append("HEAD")
+
+        args.extend(
+            [
+                "--reverse",
+                f"--pretty=format:{fmt}",
+                "--no-merges",
+            ]
+        )
+
+        if path:
+            args.extend(["--", path])
+
+        result = self._run(args)
+
+        return _parse_git_log_output(result.stdout)
+
+    def get_initial_commit_sha(self) -> str | None:
+        """Return the hash of the first (root) commit reachable from HEAD.
+
+        Returns:
+            Full object name, or None when the history cannot be resolved.
+        """
+        result = self._run(
+            ["rev-list", "--max-parents=0", "HEAD"],
+            check=False,
+        )
+
+        if result.returncode != 0:
+            log.debug(
+                "Could not resolve initial commit: %s",
+                result.stderr.strip(),
+            )
+
+            return None
+
+        line = result.stdout.strip().splitlines()
+
+        return line[0].strip() if line else None
+
 
 class GitBackendBuiltinPlugin(GitBackendPlugin):
     """Register the subprocess Git backend with the plugin registry."""
@@ -181,3 +301,46 @@ class GitBackendBuiltinPlugin(GitBackendPlugin):
             registry: Active plugin registry for the current distlift run.
         """
         registry.register_git_backend_plugin(self, source="builtin")
+
+
+def _parse_git_log_output(stdout: str) -> list[GitCommitRecord]:
+    """Split formatted ``git log`` stdout into structured rows.
+
+    Args:
+        stdout: Raw stdout using ``_LOG_FIELD_SEP`` and ``_LOG_RECORD_SEP``.
+    """
+    if not stdout.strip():
+        return []
+
+    rows: list[GitCommitRecord] = []
+
+    for raw_rec in stdout.split(_LOG_RECORD_SEP):
+        rec = raw_rec.strip(_RECORD_CHUNK_STRIP_CHARS)
+
+        if not rec:
+            continue
+
+        # Limit splits so an empty %b body still yields a sixth field and any
+        # accidental separator characters inside the body remain intact.
+        parts = rec.split(_LOG_FIELD_SEP, maxsplit=5)
+
+        if len(parts) != 6:
+            log.debug(
+                "Skipping malformed git log row with %d fields",
+                len(parts),
+            )
+
+            continue
+
+        rows.append(
+            GitCommitRecord(
+                sha_full=parts[0],
+                sha_short=parts[1],
+                author=parts[2],
+                authored_iso=parts[3],
+                subject=parts[4],
+                body=parts[5],
+            )
+        )
+
+    return rows

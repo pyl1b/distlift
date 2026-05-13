@@ -9,6 +9,7 @@ import attrs
 import typer
 
 from distlift.app import DistliftApplication
+from distlift.cli_changelog import changelog_app
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
 from distlift.logging_utils import configure_logging
@@ -33,6 +34,7 @@ plugins_app = typer.Typer(help="Plugin commands.", no_args_is_help=True)
 app.add_typer(release_app, name="release")
 app.add_typer(config_app, name="config")
 app.add_typer(plugins_app, name="plugins")
+app.add_typer(changelog_app, name="changelog")
 
 
 @app.callback(invoke_without_command=True)
@@ -69,6 +71,13 @@ def distlift_main_callback(
             ),
         ),
     ] = False,
+    no_changelog: Annotated[
+        bool,
+        typer.Option(
+            "--no-changelog",
+            help="Skip automatic changelog updates for this release.",
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[
         Path,
@@ -83,6 +92,7 @@ def distlift_main_callback(
         dry_run: When ``True``, plan release without Git writes.
         build: When ``True``, build artifacts after a successful release.
         publish: When ``True``, build and publish after a successful release.
+        no_changelog: When ``True``, skip changelog planning for this release.
         verbose: When ``True``, enable verbose logging for this process.
         repo_root: Filesystem path to the repository root directory.
     """
@@ -108,6 +118,7 @@ def distlift_main_callback(
         dry_run=dry_run,
         build=build,
         publish=publish,
+        skip_changelog=no_changelog,
     )
 
     if not release_result.success:
@@ -445,6 +456,13 @@ def list_config_command(
     typer.echo(f"  version_source  : {config.version_source}")
     typer.echo(f"  remotes         : {config.remotes}")
     typer.echo(f"  manifest_path   : {config.manifest_path}")
+    ch = config.changelog
+    typer.echo(f"  changelog.enabled : {ch.enabled}")
+    typer.echo(f"  changelog.path    : {ch.path}")
+    typer.echo(
+        "  changelog.compare_url_template : %s"
+        % (ch.compare_url_template or "(auto)")
+    )
 
     if config.field_sources:
         typer.echo("\nField sources:")

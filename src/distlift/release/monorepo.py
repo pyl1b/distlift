@@ -17,6 +17,7 @@ from distlift.monorepo.discovery import (
     resolve_package_manifest_path,
 )
 from distlift.plugins.registry import PluginRegistry
+from distlift.release.changelog_extra import finalize_plan_with_changelog
 from distlift.release.models import (
     MonorepoReleaseRequest,
     PackageReleasePlan,
@@ -188,6 +189,14 @@ def compute_monorepo_release_plan(
             )
         )
 
-    return plan_monorepo_release(
+    plan = plan_monorepo_release(
         pkg_plans, request.config, request.repo_root, request.dry_run
+    )
+
+    return finalize_plan_with_changelog(
+        plan,
+        git_repo=git,
+        tags=tags,
+        config=request.config,
+        skip_changelog=request.skip_changelog,
     )

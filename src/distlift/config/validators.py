@@ -21,6 +21,7 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
     validate_version_policy(config)
     validate_remote_names(config)
     validate_tag_template(config)
+    validate_changelog_config(config)
 
     if config.mode == ReleaseMode.MONOREPO:
         validate_monorepo_config(config)
@@ -29,6 +30,41 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
         raise ConfigurationError(
             f"Explicit manifest path does not exist: {config.manifest_path}"
         )
+
+
+_KEEP_A_CHANGELOG_SECTION_TITLES = frozenset(
+    {"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
+)
+
+
+def validate_changelog_config(config: ResolvedConfig) -> None:
+    """Validate changelog-related settings on the resolved configuration.
+
+    Args:
+        config: Fully merged configuration including ``changelog``.
+    """
+    ch = config.changelog
+    tpl = ch.compare_url_template.strip()
+
+    if tpl:
+        if "{prev}" not in tpl or "{next}" not in tpl:
+            raise ConfigurationError(
+                "changelog.compare_url_template must contain "
+                "both {prev} and {next} placeholders when set"
+            )
+
+    if ch.default_section not in _KEEP_A_CHANGELOG_SECTION_TITLES:
+        raise ConfigurationError(
+            "changelog.default_section must be one of: "
+            + ", ".join(sorted(_KEEP_A_CHANGELOG_SECTION_TITLES))
+        )
+
+    for ctype, section in ch.commit_mapping.items():
+        if section not in _KEEP_A_CHANGELOG_SECTION_TITLES:
+            raise ConfigurationError(
+                "changelog.commit_mapping values must be Keep a Changelog "
+                f"section titles (got {section!r} for type {ctype!r})"
+            )
 
 
 def validate_version_policy(config: ResolvedConfig) -> None:
