@@ -44,6 +44,22 @@ _CHANGELOG_ALLOWED_KEYS = frozenset(
     }
 )
 
+_DEPLOY_ALLOWED_KEYS = frozenset({"tag_prefix", "verify_indexes"})
+
+
+def _deploy_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
+    """Return only recognized deploy keys from a parsed mapping.
+
+    Args:
+        mapping: Value read from a ``deploy`` table or similar structure.
+    """
+    if not isinstance(mapping, dict):
+        return {}
+
+    return {
+        str(k): v for k, v in mapping.items() if str(k) in _DEPLOY_ALLOWED_KEYS
+    }
+
 
 def _changelog_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
     """Return only recognized changelog keys from a parsed mapping.
@@ -288,6 +304,20 @@ def load_environment_config(
     if changelog_env:
         result["changelog"] = changelog_env
 
+    deploy_env: dict[str, Any] = {}
+
+    if v := _get("DEPLOY_TAG_PREFIX"):
+        stripped = str(v).strip()
+
+        if stripped:
+            deploy_env["tag_prefix"] = stripped
+
+    if v := _get("DEPLOY_VERIFY_INDEXES"):
+        deploy_env["verify_indexes"] = v.lower() in ("1", "true", "yes")
+
+    if deploy_env:
+        result["deploy"] = deploy_env
+
     hooks_append_kw: dict[str, list[HookSpec]] = {}
 
     for event_key, suffix in HOOK_ENV_KEY_SUFFIXES.items():
@@ -453,6 +483,8 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
 
     changelog_overlay = _changelog_overlay_from_mapping(data.get("changelog"))
 
+    deploy_overlay = _deploy_overlay_from_mapping(data.get("deploy"))
+
     hooks = hooks_config_from_mapping(data.get("hooks", {}))
 
     hooks_append_raw = data.get("hooks_append")
@@ -474,6 +506,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog_overlay=changelog_overlay,
+        deploy_overlay=deploy_overlay,
         hooks=hooks,
         hooks_append=hooks_append,
         source=source,

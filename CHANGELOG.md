@@ -10,6 +10,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `distlift deploy`: create and push the next CI marker tag ``{prefix}_{N}``
+  (default prefix ``deploy``); optional registry checks via
+  ``deploy.verify_indexes`` / ``--verify-indexes`` (Python: ``pip``, JS:
+  ``npm``).
+
 ## [0.1.4] - 2026-05-13
 
 ### Changed

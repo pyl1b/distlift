@@ -21,6 +21,7 @@ from distlift.config.files import (
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
 from distlift.constants import ENV_PREFIX, HOOK_ENV_KEY_SUFFIXES
+from distlift.deploy.models import DeployRequest
 from distlift.errors import ConfigurationError
 from distlift.logging_utils import configure_logging
 from distlift.plugins.base import DistliftPlugin
@@ -674,6 +675,9 @@ def list_config_command(
         "  changelog.compare_url_template : %s"
         % (ch.compare_url_template or "(auto)")
     )
+    dep = config.deploy
+    typer.echo(f"  deploy.tag_prefix      : {dep.tag_prefix}")
+    typer.echo(f"  deploy.verify_indexes  : {dep.verify_indexes}")
     hooks = config.hooks
     typer.echo("  hooks (counts per event):")
     typer.echo(f"    tag_pushed        : {len(hooks.tag_pushed)}")
@@ -972,6 +976,138 @@ def edit_repo_config_command(
         no_create: When True, do not create ``distlift.toml`` if it is missing.
     """
     _edit_repo_config_file(repo_root.resolve(), create=not no_create)
+
+
+@app.command("deploy")
+def deploy_command(
+    config_path: Annotated[
+        Path | None,
+        typer.Option("--config", help="Extra config file"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show the next tag without creating or pushing it.",
+        ),
+    ] = False,
+    remote: Annotated[
+        list[str] | None,
+        typer.Option("--remote", help="Push remote(s)"),
+    ] = None,
+    verify_indexes: Annotated[
+        bool | None,
+        typer.Option(
+            "--verify-indexes/--no-verify-indexes",
+            help=(
+                "Require current manifest version(s) on PyPI/npm before "
+                "tagging (overrides deploy.verify_indexes)."
+            ),
+        ),
+    ] = None,
+    tag_prefix: Annotated[
+        str | None,
+        typer.Option(
+            "--tag-prefix",
+            help="Override deploy.tag_prefix for this run (e.g. release).",
+        ),
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
+    repo_root: Annotated[
+        Path,
+        typer.Option("--repo-root", help="Repository root"),
+    ] = Path("."),
+) -> None:
+    """Create and push the next CI marker tag ``{prefix}_{N}`` at HEAD.
+
+    The prefix defaults to ``deploy``; configure it under the ``deploy`` table
+    as ``tag_prefix`` or with ``--tag-prefix``. With ``--verify-indexes``,
+    refuse to tag until each package version is visible on the index (``pip``
+    / ``npm`` use your normal tool config).
+
+    Args:
+        config_path: Optional extra TOML config path.
+        dry_run: When True, print the planned tag without Git writes.
+        remote: Optional Git remote names (replaces configured remotes).
+        verify_indexes: Tri-state override for registry checks.
+        tag_prefix: Optional one-run prefix for the numbered tag.
+        verbose: When True, enable verbose logging.
+        repo_root: Repository root directory path.
+    """
+    application, config = _resolve_app_config(
+        repo_root.resolve(),
+        config_path,
+        None,
+        remote,
+        None,
+        None,
+        dry_run,
+        verbose,
+    )
+
+    prefix_opt = tag_prefix.strip() if tag_prefix else None
+
+    if prefix_opt == "":
+        typer.echo("--tag-prefix cannot be empty", err=True)
+        raise typer.Exit(1)
+
+    eff_deploy = attrs.evolve(
+        config.deploy,
+        tag_prefix=prefix_opt or config.deploy.tag_prefix,
+        verify_indexes=(
+            verify_indexes
+            if verify_indexes is not None
+            else config.deploy.verify_indexes
+        ),
+    )
+    cfg = attrs.evolve(config, deploy=eff_deploy)
+
+    try:
+        validate_resolved_config(cfg)
+    except Exception as exc:
+        typer.echo(f"Configuration error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    request = DeployRequest(
+        repo_root=repo_root.resolve(),
+        config=cfg,
+        dry_run=dry_run,
+    )
+
+    try:
+        result = application.run_deploy(request)
+    except Exception as exc:
+        typer.echo(f"Deploy failed: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if not result.success:
+        typer.echo(result.error or "Deploy failed", err=True)
+
+        for check in result.checks:
+            if not check.ok:
+                typer.echo(
+                    "  {} ({}): {}".format(
+                        check.label,
+                        check.registry_name,
+                        check.detail or "failed",
+                    ),
+                    err=True,
+                )
+
+        raise typer.Exit(1)
+
+    prefix_txt = "[dry-run] " if dry_run else ""
+
+    typer.echo(f"{prefix_txt}Deploy tag: {result.tag_name}")
+
+    if result.pushed_remotes:
+        typer.echo("Pushed to: {}".format(", ".join(result.pushed_remotes)))
+
+    for check in result.checks:
+        if check.ok:
+            typer.echo(
+                f"  verified {check.label} {check.registry_name}@{check.version}"
+            )
 
 
 @plugins_app.command("list")

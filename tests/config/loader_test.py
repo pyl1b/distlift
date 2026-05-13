@@ -91,6 +91,28 @@ class TestParseRawConfigMonorepoPackages:
             _parse_raw_config(data, "test")
 
 
+class TestParseDeployTable:
+    """``[deploy]`` table becomes ``deploy_overlay`` on ``RawConfig``."""
+
+    def test_parses_tag_prefix_and_verify(self) -> None:
+        """Recognized keys are retained; unknown keys are dropped."""
+
+        data = {
+            "deploy": {
+                "tag_prefix": "ship",
+                "verify_indexes": True,
+                "unknown": "x",
+            },
+        }
+
+        raw = _parse_raw_config(data, "file")
+
+        assert raw.deploy_overlay == {
+            "tag_prefix": "ship",
+            "verify_indexes": True,
+        }
+
+
 class TestLoadEnvironmentConfig:
     """Tests for environment-backed raw configuration loading."""
 
@@ -147,3 +169,16 @@ class TestLoadEnvironmentConfig:
 
         # Confirm the blank value is not propagated to the raw config.
         assert "editor" not in data
+
+    def test_parses_deploy_settings(self) -> None:
+        """``DISTLIFT_DEPLOY_*`` maps into a ``deploy`` table."""
+
+        data = load_environment_config(
+            {
+                "DISTLIFT_DEPLOY_TAG_PREFIX": "rel",
+                "DISTLIFT_DEPLOY_VERIFY_INDEXES": "true",
+            },
+        )
+
+        assert data["deploy"]["tag_prefix"] == "rel"
+        assert data["deploy"]["verify_indexes"] is True

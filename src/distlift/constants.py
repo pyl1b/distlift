@@ -19,6 +19,7 @@ HOOK_ENV_KEY_SUFFIXES: dict[str, str] = {
 
 DEFAULT_REMOTE = "origin"
 DEFAULT_VERSION = "0.1.0"
+DEFAULT_DEPLOY_TAG_PREFIX = "deploy"
 DEFAULT_TAG_TEMPLATE = "v{version}"
 DEFAULT_MONOREPO_TAG_TEMPLATE = "v{version}-{package}"
 

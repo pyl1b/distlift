@@ -105,3 +105,21 @@ class TestMergeConfigLayers:
 
         assert config.editor == "code --wait"
         assert config.field_sources.get("editor") == "environment"
+
+    def test_deploy_overlay_merge(self) -> None:
+        """Merge shallow ``[deploy]`` keys across layers."""
+
+        layer1 = RawConfig(
+            deploy_overlay={"tag_prefix": "rel"},
+            source="a",
+        )
+
+        layer2 = RawConfig(
+            deploy_overlay={"verify_indexes": True},
+            source="b",
+        )
+
+        config = merge_config_layers([layer1, layer2])
+
+        assert config.deploy.tag_prefix == "rel"
+        assert config.deploy.verify_indexes is True

@@ -7,6 +7,7 @@ from typing import Any
 import attrs
 
 from distlift.constants import (
+    DEFAULT_DEPLOY_TAG_PREFIX,
     DEFAULT_REMOTE,
     DEFAULT_TAG_TEMPLATE,
     DEFAULT_VERSION,
@@ -121,6 +122,20 @@ class ChangelogConfig:
         _default_changelog_commit_mapping
     )
     default_section: str = "Changed"
+
+
+@attrs.define
+class DeployConfig:
+    """Settings for ``distlift deploy`` CI marker tags.
+
+    Attributes:
+        tag_prefix: Prefix for numbered tags ``{prefix}_{N}``.
+        verify_indexes: When True, require manifest versions to exist on
+            PyPI / npm (per language) before creating the tag.
+    """
+
+    tag_prefix: str = DEFAULT_DEPLOY_TAG_PREFIX
+    verify_indexes: bool = False
 
 
 class VersionSource(StrEnum):
@@ -264,6 +279,8 @@ class RawConfig:
         monorepo: Monorepo section contributed by this layer.
         changelog_overlay: Optional shallow overlay dict for ``changelog`` keys
             from this layer; merged field-by-field across layers.
+        deploy_overlay: Shallow overlay dict for ``[deploy]`` keys from this
+            layer; merged field-by-field across layers.
         hooks: Hook commands from this layer's ``[hooks]`` table.
         hooks_append: Extra hook specs parsed from ``DISTLIFT_HOOKS_*``; only
             the environment layer supplies these; appended after TOML merge.
@@ -282,6 +299,7 @@ class RawConfig:
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog_overlay: dict[str, Any] = attrs.Factory(dict)
+    deploy_overlay: dict[str, Any] = attrs.Factory(dict)
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     hooks_append: HooksConfig = attrs.Factory(_empty_hooks_config)
     source: str = "<unknown>"
@@ -307,6 +325,7 @@ class ResolvedConfig:
         plugins: Effective plugin discovery and override settings.
         monorepo: Effective monorepo enable flag and merged package list.
         changelog: Effective Keep a Changelog generation settings.
+        deploy: Effective ``distlift deploy`` settings.
         hooks: Effective lifecycle hook command lists.
         field_sources: Map of top-level scalar field names to the source
             label of the layer that last set each field.
@@ -324,5 +343,6 @@ class ResolvedConfig:
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog: ChangelogConfig = attrs.Factory(ChangelogConfig)
+    deploy: DeployConfig = attrs.Factory(DeployConfig)
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     field_sources: dict[str, str] = attrs.Factory(dict)

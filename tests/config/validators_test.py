@@ -8,6 +8,7 @@ import pytest
 
 from distlift.config.models import (
     ChangelogConfig,
+    DeployConfig,
     Language,
     ManagedPackageConfig,
     MonorepoConfig,
@@ -115,3 +116,18 @@ class TestValidateResolvedConfig:
 
         with pytest.raises(ConfigurationError):
             validate_resolved_config(config)
+
+    def test_deploy_tag_prefix_must_be_safe(self) -> None:
+        """Reject empty or unsafe ``deploy.tag_prefix`` values."""
+
+        bad = DeployConfig(tag_prefix="bad/prefix")
+        config = _base_config(deploy=bad)
+
+        with pytest.raises(ConfigurationError):
+            validate_resolved_config(config)
+
+        empty = DeployConfig(tag_prefix="   ")
+        config2 = _base_config(deploy=empty)
+
+        with pytest.raises(ConfigurationError):
+            validate_resolved_config(config2)

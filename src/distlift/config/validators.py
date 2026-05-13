@@ -23,6 +23,7 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
     validate_remote_names(config)
     validate_tag_template(config)
     validate_changelog_config(config)
+    validate_deploy_config(config)
     validate_hooks_config(config)
 
     if config.mode == ReleaseMode.MONOREPO:
@@ -126,6 +127,24 @@ def validate_changelog_config(config: ResolvedConfig) -> None:
                 "changelog.commit_mapping values must be Keep a Changelog "
                 f"section titles (got {section!r} for type {ctype!r})"
             )
+
+
+def validate_deploy_config(config: ResolvedConfig) -> None:
+    """Validate ``[deploy]`` settings on the resolved configuration.
+
+    Args:
+        config: Fully merged configuration including ``deploy``.
+    """
+    prefix = config.deploy.tag_prefix.strip()
+
+    if not prefix:
+        raise ConfigurationError("deploy.tag_prefix cannot be empty")
+
+    if not re.match(r"^[A-Za-z0-9_-]+$", prefix):
+        raise ConfigurationError(
+            "deploy.tag_prefix must contain only ASCII letters, digits, "
+            "underscore, or hyphen"
+        )
 
 
 def validate_version_policy(config: ResolvedConfig) -> None:

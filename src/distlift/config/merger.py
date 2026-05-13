@@ -8,6 +8,7 @@ import attrs
 
 from distlift.config.models import (
     ChangelogConfig,
+    DeployConfig,
     HooksConfig,
     ManagedPackageConfig,
     MonorepoConfig,
@@ -82,6 +83,42 @@ def changelog_from_merged_overlay(overlay: dict[str, Any]) -> ChangelogConfig:
         kw["default_section"] = str(overlay["default_section"])
 
     return attrs.evolve(base, **kw)
+
+
+def deploy_from_merged_overlay(overlay: dict[str, Any]) -> DeployConfig:
+    """Build a ``DeployConfig`` from merged overlay key-values.
+
+    Args:
+        overlay: Merged mapping of deploy keys from configuration layers.
+    """
+    base = DeployConfig()
+
+    if not overlay:
+        return base
+
+    kw: dict[str, Any] = {}
+
+    if "tag_prefix" in overlay:
+        kw["tag_prefix"] = str(overlay["tag_prefix"])
+
+    if "verify_indexes" in overlay:
+        kw["verify_indexes"] = bool(overlay["verify_indexes"])
+
+    return attrs.evolve(base, **kw)
+
+
+def merge_deploy_overlays(layers: Sequence[RawConfig]) -> DeployConfig:
+    """Merge deploy overlay fragments from all layers (low to high).
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
+    """
+    merged: dict[str, Any] = {}
+
+    for layer in layers:
+        merged.update(layer.deploy_overlay)
+
+    return deploy_from_merged_overlay(merged)
 
 
 def merge_changelog_overlays(layers: Sequence[RawConfig]) -> ChangelogConfig:
@@ -316,6 +353,8 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
 
     changelog_config = merge_changelog_overlays(layers)
 
+    deploy_config = merge_deploy_overlays(layers)
+
     hooks_config = merge_hooks_layers(layers)
 
     return ResolvedConfig(
@@ -337,6 +376,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         plugins=plugin_config,
         monorepo=monorepo_config,
         changelog=changelog_config,
+        deploy=deploy_config,
         hooks=hooks_config,
         field_sources=field_sources,
     )

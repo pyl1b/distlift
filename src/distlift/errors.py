@@ -65,6 +65,14 @@ class PublishError(DistliftError):
     """
 
 
+class DeployError(DistliftError):
+    """Deploy tag planning or index verification failed.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """
+
+
 class PluginError(DistliftError):
     """Plugin discovery, loading, or registration failed.
 

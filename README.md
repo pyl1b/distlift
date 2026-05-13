@@ -153,6 +153,26 @@ shown.
 
 Add `--dry-run` to preview what would happen without writing to Git.
 
+## Deploy marker tags (CI)
+
+When one Git tag should trigger deployment for the whole repo (for example
+after several package versions were released), use:
+
+```text
+distlift deploy
+```
+
+That creates the next tag `deploy_1`, `deploy_2`, … at `HEAD` and pushes it to
+each configured remote. The working tree must be clean. The prefix is
+configurable (default `deploy`): see `[deploy].tag_prefix` in TOML or
+`DISTLIFT_DEPLOY_TAG_PREFIX`.
+
+Use `--dry-run` to print the planned tag without creating it. With
+`deploy.verify_indexes` or `--verify-indexes`, distlift checks that each
+package’s manifest version is visible on PyPI (`python -m pip index …`) or
+npm (`npm view …`), using your normal `pip` / `npm` configuration. See also
+`DISTLIFT_DEPLOY_VERIFY_INDEXES`.
+
 distlift can maintain a **Keep a Changelog**-style `CHANGELOG.md` using your
 Git history (and conventional commit messages when enabled).
 

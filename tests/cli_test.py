@@ -39,6 +39,7 @@ class TestCLI:
         )
         assert result.exit_code == 0
         assert "editor" in result.output
+        assert "deploy.tag_prefix" in result.output
 
     def test_plugins_list_runs(self, tmp_path):
         result = runner.invoke(
@@ -60,6 +61,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            all_changed: bool = True,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
             bump: object | None = None,
@@ -133,6 +135,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            all_changed: bool = True,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
             bump: BumpKind | None = None,
@@ -170,6 +173,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            all_changed: bool = True,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
             bump: BumpKind | None = None,
@@ -255,6 +259,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            all_changed: bool = True,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
             bump: object | None = None,
@@ -305,6 +310,7 @@ class TestCLI:
             dry_run: bool,
             build: bool,
             publish: bool,
+            all_changed: bool = True,
             skip_changelog: bool = False,
             skip_changelog_editor: bool = False,
             bump: object | None = None,

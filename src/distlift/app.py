@@ -14,6 +14,8 @@ from distlift.config.models import (
     ReleaseMode,
     ResolvedConfig,
 )
+from distlift.deploy.models import DeployRequest, DeployResult
+from distlift.deploy.service import run_deploy as run_deploy_service
 from distlift.errors import HookExecutionError
 from distlift.hooks import run_config_hooks
 from distlift.monorepo.discovery import load_managed_packages
@@ -512,6 +514,21 @@ class DistliftApplication:
             return ReleaseResult(
                 success=False, dry_run=request.dry_run, error=str(exc)
             )
+
+    def run_deploy(self, request: DeployRequest) -> DeployResult:
+        """Create and push a numbered deploy marker tag at ``HEAD``.
+
+        Args:
+            request: Repository root, effective configuration, and dry-run
+                flag for this deploy run.
+
+        Returns:
+            Outcome with the tag name, remotes pushed to, optional index
+            checks, or an error message.
+        """
+        registry = self._default_registry(request.config)
+
+        return run_deploy_service(request, registry)
 
     def run_publish(
         self,

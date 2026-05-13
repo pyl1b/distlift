@@ -46,6 +46,22 @@ def get_project_version(data: dict[str, Any]) -> str | None:
     return data.get("project", {}).get("version")
 
 
+def get_project_name(data: dict[str, Any]) -> str | None:
+    """Return ``project.name`` from parsed pyproject data, if present.
+
+    Args:
+        data: Parsed ``pyproject.toml`` document as a mapping.
+    """
+    raw = data.get("project", {}).get("name")
+
+    if raw is None:
+        return None
+
+    name = str(raw).strip()
+
+    return name or None
+
+
 def set_project_version(path: Path, version: str) -> None:
     """Set ``project.version`` in ``path`` using format-preserving TOML writes.
 
