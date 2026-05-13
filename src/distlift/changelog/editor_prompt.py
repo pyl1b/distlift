@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -16,35 +14,29 @@ from distlift.changelog.builder import (
 from distlift.changelog.formatter import render_release_entry
 from distlift.changelog.models import ChangelogUpdatePlan
 from distlift.changelog.parser import parse_release_entry_markdown
-from distlift.errors import ChangelogError
+from distlift.editor import launch_editor_blocking, resolve_editor_command
+from distlift.errors import ChangelogError, ConfigurationError
 from distlift.logging_utils import get_logger
 
 log = get_logger(__name__)
 
+# Re-exported for backward compatibility with callers and tests that
+# patched ``distlift.changelog.editor_prompt.resolve_editor_command``.
+__all__ = [
+    "resolve_editor_command",
+    "edit_text_in_external_editor",
+    "maybe_prompt_edit_changelog_entry",
+]
 
-def resolve_editor_command() -> str | None:
-    """Return the first non-empty editor preference from the environment.
 
-    Returns:
-        A shell-style editor command string, or ``None`` when unset.
-    """
-    # Prefer Git's convention: GIT_EDITOR, then POSIX VISUAL/EDITOR
-    for key in ("GIT_EDITOR", "VISUAL", "EDITOR"):
-        raw = os.environ.get(key)
-
-        if raw is None:
-            continue
-
-        stripped = str(raw).strip()
-
-        if stripped:
-            return stripped
-
-    return None
+_CHANGELOG_SKIP_HINT = (
+    "To skip this prompt instead, pass --no-changelog-editor "
+    "or set changelog.prompt_editor = false in your config."
+)
 
 
 def edit_text_in_external_editor(initial: str) -> str:
-    """Write ``initial`` to a temp file, spawn ``$GIT_EDITOR``, return body.
+    """Write ``initial`` to a temp file, spawn the editor, return body.
 
     Args:
         initial: Markdown seeded before the editor opens.
@@ -56,13 +48,6 @@ def edit_text_in_external_editor(initial: str) -> str:
         ChangelogError: When no editor is configured, invocation fails, or the
             result cannot be read.
     """
-    editor_cmd = resolve_editor_command()
-
-    if editor_cmd is None:
-        raise ChangelogError(
-            "No editor configured (set GIT_EDITOR, VISUAL, or EDITOR)"
-        )
-
     tmp_path_str: str | None = None
 
     try:
@@ -76,29 +61,23 @@ def edit_text_in_external_editor(initial: str) -> str:
 
         path.write_text(initial, encoding="utf-8", newline="\n")
 
-        posix_split = os.name != "nt"
-        argv = shlex.split(editor_cmd, posix=posix_split) + [str(path)]
-
         # Block until the editor exits; rely on its status for success
-        completed = subprocess.run(
-            argv,
-            check=False,
-            text=True,
-            capture_output=True,
-        )
+        try:
+            exit_code = launch_editor_blocking(
+                path, skip_hint=_CHANGELOG_SKIP_HINT
+            )
+        except ConfigurationError as exc:
+            raise ChangelogError(str(exc)) from exc
 
-        if completed.returncode != 0:
-            err_txt = (completed.stderr or "").strip()
-
+        if exit_code != 0:
             log.error(
-                "External editor exited with code %d: %s",
-                completed.returncode,
-                err_txt or "(no stderr)",
+                "External editor exited with code %d while editing %s",
+                exit_code,
+                path,
             )
 
             raise ChangelogError(
-                f"Editor exited with status {completed.returncode}; "
-                f"{err_txt or 'see logs'}"
+                f"Editor exited with status {exit_code}; see logs"
             )
 
         return path.read_text(encoding="utf-8")

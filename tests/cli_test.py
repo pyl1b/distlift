@@ -1,9 +1,15 @@
+import subprocess
 from pathlib import Path
+from typing import Any
 
 from typer.testing import CliRunner
 
+from distlift import editor as editor_module
 from distlift.app import DistliftApplication
 from distlift.cli import app
+from distlift.config import files as files_module
+from distlift.config.files import STUB_CONFIG_CONTENT
+from distlift.editor import EDITOR_ENV_VARS
 from distlift.publish.models import PublishRunResult
 from distlift.release.models import ReleaseResult
 
@@ -232,3 +238,171 @@ class TestCLI:
         )
         result = runner.invoke(app, ["--repo-root", str(tmp_path)])
         assert result.exit_code != 0
+
+
+class TestConfigInitAndEditCommands:
+    """Cover ``config init-user/system`` and ``config edit-user/system``."""
+
+    def _redirect_scopes(
+        self, tmp_path: Path, monkeypatch
+    ) -> tuple[Path, Path]:
+        """Point user and system lookups at temp paths.
+
+        Args:
+            tmp_path: Pytest temporary directory used as the scope root.
+            monkeypatch: Pytest monkeypatch fixture.
+        """
+        user_path = tmp_path / "user" / "distlift" / "config.toml"
+        system_path = tmp_path / "system" / "distlift" / "config.toml"
+        monkeypatch.setattr(
+            files_module, "DEFAULT_USER_CONFIG_PATHS", [user_path]
+        )
+        monkeypatch.setattr(
+            files_module, "DEFAULT_SYSTEM_CONFIG_PATHS", [system_path]
+        )
+        return user_path, system_path
+
+    def _stub_editor(self, monkeypatch, exit_code: int = 0) -> dict[str, Any]:
+        """Replace ``subprocess.run`` so no real editor is launched.
+
+        Args:
+            monkeypatch: Pytest monkeypatch fixture.
+            exit_code: Exit status the fake editor process reports.
+        """
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("EDITOR", "myeditor")
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, exit_code)
+
+        monkeypatch.setattr(editor_module.subprocess, "run", fake_run)
+        return captured
+
+    def test_init_user_creates_stub(self, tmp_path: Path, monkeypatch) -> None:
+        """``config init-user`` writes the stub at the user path."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+
+        result = runner.invoke(app, ["config", "init-user"])
+
+        assert result.exit_code == 0
+        assert user_path.is_file()
+        assert user_path.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+        assert "Created user config" in result.output
+
+    def test_init_user_keeps_existing_without_force(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Existing user files are preserved without ``--force``."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+        user_path.parent.mkdir(parents=True, exist_ok=True)
+        user_path.write_text("# kept\n", encoding="utf-8")
+
+        result = runner.invoke(app, ["config", "init-user"])
+
+        assert result.exit_code == 0
+        assert user_path.read_text(encoding="utf-8") == "# kept\n"
+        assert "already exists" in result.output
+
+    def test_init_user_force_overwrites(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``--force`` replaces the file with the default stub."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+        user_path.parent.mkdir(parents=True, exist_ok=True)
+        user_path.write_text("# kept\n", encoding="utf-8")
+
+        result = runner.invoke(app, ["config", "init-user", "--force"])
+
+        assert result.exit_code == 0
+        assert user_path.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+
+    def test_init_user_unsupported_platform_errors(self, monkeypatch) -> None:
+        """Missing OS location yields a clear non-zero exit."""
+        monkeypatch.setattr(files_module, "DEFAULT_USER_CONFIG_PATHS", [])
+
+        result = runner.invoke(app, ["config", "init-user"])
+
+        assert result.exit_code == 1
+        assert "Cannot determine" in result.output
+
+    def test_init_system_creates_stub(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``config init-system`` writes the stub at the system path."""
+        _, system_path = self._redirect_scopes(tmp_path, monkeypatch)
+
+        result = runner.invoke(app, ["config", "init-system"])
+
+        assert result.exit_code == 0
+        assert system_path.is_file()
+        assert "Created system config" in result.output
+
+    def test_edit_user_creates_then_launches_editor(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A missing file is seeded before the editor is invoked."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+        captured = self._stub_editor(monkeypatch)
+
+        result = runner.invoke(app, ["config", "edit-user"])
+
+        assert result.exit_code == 0
+        assert user_path.is_file()
+        assert captured["argv"][-1] == str(user_path)
+
+    def test_edit_user_no_create_errors_when_missing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``--no-create`` refuses to seed and exits non-zero."""
+        user_path, _ = self._redirect_scopes(tmp_path, monkeypatch)
+        self._stub_editor(monkeypatch)
+
+        result = runner.invoke(app, ["config", "edit-user", "--no-create"])
+
+        assert result.exit_code == 1
+        assert not user_path.exists()
+        assert "init-user" in result.output
+
+    def test_edit_user_missing_editor_errors(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No editor env var yields the verbose ``ConfigurationError``."""
+        self._redirect_scopes(tmp_path, monkeypatch)
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+
+        result = runner.invoke(app, ["config", "edit-user"])
+
+        assert result.exit_code == 1
+        # The message should reference all three variables for users
+        for key in EDITOR_ENV_VARS:
+            assert key in result.output
+
+    def test_edit_user_forwards_editor_failure(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A non-zero editor exit propagates to the CLI exit code."""
+        self._redirect_scopes(tmp_path, monkeypatch)
+        self._stub_editor(monkeypatch, exit_code=7)
+
+        result = runner.invoke(app, ["config", "edit-user"])
+
+        assert result.exit_code == 7
+        assert "Editor exited with status 7" in result.output
+
+    def test_edit_system_opens_system_path(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``config edit-system`` opens the system-scoped file."""
+        _, system_path = self._redirect_scopes(tmp_path, monkeypatch)
+        captured = self._stub_editor(monkeypatch)
+
+        result = runner.invoke(app, ["config", "edit-system"])
+
+        assert result.exit_code == 0
+        assert system_path.is_file()
+        assert captured["argv"][-1] == str(system_path)

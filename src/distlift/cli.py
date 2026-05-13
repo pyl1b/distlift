@@ -10,9 +10,15 @@ import typer
 
 from distlift.app import DistliftApplication
 from distlift.cli_changelog import changelog_app
+from distlift.config.files import (
+    ConfigScope,
+    create_config_file,
+    open_config_file_in_editor,
+)
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
 from distlift.constants import ENV_PREFIX, HOOK_ENV_KEY_SUFFIXES
+from distlift.errors import ConfigurationError
 from distlift.logging_utils import configure_logging
 from distlift.plugins.base import DistliftPlugin
 from distlift.release.models import (
@@ -543,6 +549,154 @@ def validate_config_command(
     except Exception as exc:
         typer.echo(f"Validation failed: {exc}", err=True)
         raise typer.Exit(1)
+
+
+def _init_config_file(scope: ConfigScope, force: bool) -> None:
+    """Create the user or system config file and print a status message.
+
+    Args:
+        scope: Whether to target the user-level or system-level path.
+        force: When True, overwrite an existing file with the stub.
+    """
+    try:
+        path, created = create_config_file(scope, force=force)
+    except ConfigurationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    except OSError as exc:
+        typer.echo(
+            f"Failed to write {scope.value} config file: {exc}", err=True
+        )
+        raise typer.Exit(1)
+
+    if created:
+        typer.echo(f"Created {scope.value} config: {path}")
+    else:
+        typer.echo(
+            f"{scope.value.capitalize()} config already exists: {path} "
+            "(use --force to overwrite)"
+        )
+
+
+def _edit_config_file(scope: ConfigScope, create: bool) -> None:
+    """Open the user or system config file in the user's editor.
+
+    Args:
+        scope: Whether to target the user-level or system-level path.
+        create: When True, seed a stub file when none exists before opening.
+    """
+    try:
+        path, exit_code = open_config_file_in_editor(
+            scope, create_if_missing=create
+        )
+    except ConfigurationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    except OSError as exc:
+        typer.echo(
+            f"Failed to prepare {scope.value} config file: {exc}", err=True
+        )
+        raise typer.Exit(1)
+
+    if exit_code != 0:
+        typer.echo(
+            f"Editor exited with status {exit_code} for {path}", err=True
+        )
+        raise typer.Exit(exit_code)
+
+
+@config_app.command("init-user")
+def init_user_config_command(
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite the existing file with the default stub.",
+        ),
+    ] = False,
+) -> None:
+    """Create the user-level distlift config file with a commented stub.
+
+    Args:
+        force: When True, overwrite the file if it already exists.
+    """
+    _init_config_file(ConfigScope.USER, force)
+
+
+@config_app.command("init-system")
+def init_system_config_command(
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite the existing file with the default stub.",
+        ),
+    ] = False,
+) -> None:
+    """Create the system-level distlift config file with a commented stub.
+
+    Args:
+        force: When True, overwrite the file if it already exists.
+
+    Note:
+        On POSIX systems the default system location is ``/etc/distlift/``
+        and typically requires elevated privileges. On Windows the default
+        is ``%ProgramData%\\distlift\\config.toml``.
+    """
+    _init_config_file(ConfigScope.SYSTEM, force)
+
+
+@config_app.command("edit-user")
+def edit_user_config_command(
+    no_create: Annotated[
+        bool,
+        typer.Option(
+            "--no-create",
+            help=(
+                "Fail when the file does not exist instead of seeding a "
+                "stub before opening the editor."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Open the user-level distlift config file in your default editor.
+
+    The editor is resolved from ``GIT_EDITOR``, then ``VISUAL``, then
+    ``EDITOR`` (in that order). When the file does not yet exist, a
+    commented stub is created first unless ``--no-create`` is given.
+
+    Args:
+        no_create: When True, do not create the file if it is missing.
+    """
+    _edit_config_file(ConfigScope.USER, create=not no_create)
+
+
+@config_app.command("edit-system")
+def edit_system_config_command(
+    no_create: Annotated[
+        bool,
+        typer.Option(
+            "--no-create",
+            help=(
+                "Fail when the file does not exist instead of seeding a "
+                "stub before opening the editor."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Open the system-level distlift config file in your default editor.
+
+    The editor is resolved from ``GIT_EDITOR``, then ``VISUAL``, then
+    ``EDITOR`` (in that order). When the file does not yet exist, a
+    commented stub is created first unless ``--no-create`` is given.
+
+    Args:
+        no_create: When True, do not create the file if it is missing.
+
+    Note:
+        Writing the system file typically requires elevated privileges.
+    """
+    _edit_config_file(ConfigScope.SYSTEM, create=not no_create)
 
 
 @plugins_app.command("list")
