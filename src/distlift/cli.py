@@ -13,7 +13,9 @@ from distlift.cli_changelog import changelog_app
 from distlift.config.files import (
     ConfigScope,
     create_config_file,
+    create_repo_config_file,
     open_config_file_in_editor,
+    open_repo_config_file_in_editor,
 )
 from distlift.config.models import BumpKind, ResolvedConfig
 from distlift.config.validators import validate_resolved_config
@@ -606,6 +608,53 @@ def _edit_config_file(scope: ConfigScope, create: bool) -> None:
         raise typer.Exit(exit_code)
 
 
+def _init_repo_config_file(repo_root: Path, force: bool) -> None:
+    """Create ``distlift.toml`` under the repository root and print status.
+
+    Args:
+        repo_root: Repository root directory path.
+        force: When True, overwrite an existing ``distlift.toml`` with the stub.
+    """
+    try:
+        path, created = create_repo_config_file(repo_root, force=force)
+    except OSError as exc:
+        typer.echo(f"Failed to write repo config file: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if created:
+        typer.echo(f"Created repo config: {path}")
+    else:
+        typer.echo(
+            f"Repo config already exists: {path} "
+            "(use --force to overwrite distlift.toml)"
+        )
+
+
+def _edit_repo_config_file(repo_root: Path, create: bool) -> None:
+    """Open the repository standalone config in the user's editor.
+
+    Args:
+        repo_root: Repository root directory path.
+        create: When True, seed ``distlift.toml`` when no standalone file exists.
+    """
+    try:
+        path, exit_code = open_repo_config_file_in_editor(
+            repo_root, create_if_missing=create
+        )
+    except ConfigurationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    except OSError as exc:
+        typer.echo(f"Failed to prepare repo config file: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if exit_code != 0:
+        typer.echo(
+            f"Editor exited with status {exit_code} for {path}", err=True
+        )
+        raise typer.Exit(exit_code)
+
+
 @config_app.command("init-user")
 def init_user_config_command(
     force: Annotated[
@@ -698,6 +747,68 @@ def edit_system_config_command(
         Writing the system file typically requires elevated privileges.
     """
     _edit_config_file(ConfigScope.SYSTEM, create=not no_create)
+
+
+@config_app.command("init-repo")
+def init_repo_config_command(
+    repo_root: Annotated[
+        Path,
+        typer.Option(
+            "--repo-root",
+            help="Repository root directory (default: current directory).",
+        ),
+    ] = Path("."),
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite distlift.toml if it already exists.",
+        ),
+    ] = False,
+) -> None:
+    """Create distlift.toml in the repository with a commented stub.
+
+    Args:
+        repo_root: Repository root directory path.
+        force: When True, replace an existing ``distlift.toml`` with the stub.
+    """
+    _init_repo_config_file(repo_root.resolve(), force)
+
+
+@config_app.command("edit-repo")
+def edit_repo_config_command(
+    repo_root: Annotated[
+        Path,
+        typer.Option(
+            "--repo-root",
+            help="Repository root directory (default: current directory).",
+        ),
+    ] = Path("."),
+    no_create: Annotated[
+        bool,
+        typer.Option(
+            "--no-create",
+            help=(
+                "Fail when no distlift.toml or .distlift.toml exists instead "
+                "of seeding distlift.toml before opening the editor."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Open the repository standalone distlift config in your default editor.
+
+    When both ``distlift.toml`` and ``.distlift.toml`` exist, the file that
+    wins in merge order (``.distlift.toml``) is opened. The editor is resolved
+    from ``GIT_EDITOR``, then ``VISUAL``, then ``EDITOR``, then the merged
+    ``editor`` setting (which may come from this repo's TOML or pyproject).
+    When no standalone file exists yet, ``distlift.toml`` is created with a
+    commented stub first unless ``--no-create`` is given.
+
+    Args:
+        repo_root: Repository root directory path.
+        no_create: When True, do not create ``distlift.toml`` if it is missing.
+    """
+    _edit_repo_config_file(repo_root.resolve(), create=not no_create)
 
 
 @plugins_app.command("list")

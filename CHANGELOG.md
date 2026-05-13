@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Commands to create and edit the repo config file.
+
+### Changed
+
+ - how to deal with GPG signing when the tests run on a local computer
+
 ## [0.1.2] - 2026-05-13
 
 ### Added

@@ -1,4 +1,4 @@
-"""Tests for user/system config file creation and editor opening."""
+"""Tests for user, system, and repo config file creation and editor opening."""
 
 from __future__ import annotations
 
@@ -14,9 +14,11 @@ from distlift.config.files import (
     STUB_CONFIG_CONTENT,
     ConfigScope,
     create_config_file,
+    create_repo_config_file,
     get_system_config_path,
     get_user_config_path,
     open_config_file_in_editor,
+    open_repo_config_file_in_editor,
 )
 from distlift.editor import EDITOR_ENV_VARS
 from distlift.errors import ConfigurationError
@@ -263,3 +265,115 @@ class TestOpenConfigFileInEditor:
         assert "DISTLIFT_EDITOR" in message
         for key in EDITOR_ENV_VARS:
             assert key in message
+
+
+class TestCreateRepoConfigFile:
+    """Cover repository ``distlift.toml`` stub seeding."""
+
+    def test_creates_distlift_toml(self, tmp_path: Path) -> None:
+        """A new ``distlift.toml`` is written with the shared stub contents."""
+        path, created = create_repo_config_file(tmp_path)
+
+        assert created is True
+        assert path == tmp_path / "distlift.toml"
+        assert path.is_file()
+        assert path.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+
+    def test_preserves_existing_without_force(self, tmp_path: Path) -> None:
+        """An existing ``distlift.toml`` is left unchanged unless forced."""
+        target = tmp_path / "distlift.toml"
+        target.write_text("# kept\n", encoding="utf-8")
+
+        path, created = create_repo_config_file(tmp_path)
+
+        assert created is False
+        assert path == target
+        assert path.read_text(encoding="utf-8") == "# kept\n"
+
+    def test_force_overwrites_distlift_toml(self, tmp_path: Path) -> None:
+        """``force=True`` replaces ``distlift.toml`` with the stub."""
+        target = tmp_path / "distlift.toml"
+        target.write_text("# old\n", encoding="utf-8")
+
+        path, created = create_repo_config_file(tmp_path, force=True)
+
+        assert created is True
+        assert path.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+
+
+class TestOpenRepoConfigFileInEditor:
+    """Cover repo editor launch and precedence between local filenames."""
+
+    def _stub_editor(
+        self,
+        monkeypatch,
+        exit_code: int = 0,
+        *,
+        config_editor: str | None = None,
+    ) -> dict[str, Any]:
+        """Replace ``subprocess.run`` so no real editor is launched.
+
+        Args:
+            monkeypatch: Pytest monkeypatch fixture.
+            exit_code: Exit status the fake editor process reports.
+            config_editor: Value returned by the patched repo editor resolver.
+        """
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("EDITOR", "myeditor")
+
+        monkeypatch.setattr(
+            files_module,
+            "_resolve_repo_editor_command",
+            lambda _root: config_editor,
+        )
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, exit_code)
+
+        monkeypatch.setattr(editor_module.subprocess, "run", fake_run)
+        return captured
+
+    def test_opens_dot_distlift_when_both_exist(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``.distlift.toml`` wins merge order and is opened when both exist."""
+        dot = tmp_path / ".distlift.toml"
+        plain = tmp_path / "distlift.toml"
+        plain.write_text("# plain\n", encoding="utf-8")
+        dot.write_text("# dot\n", encoding="utf-8")
+        captured = self._stub_editor(monkeypatch)
+
+        path, exit_code = open_repo_config_file_in_editor(tmp_path)
+
+        assert exit_code == 0
+        assert path == dot
+        assert captured["argv"][-1] == str(dot)
+
+    def test_seeds_distlift_when_no_standalone(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A missing standalone file pair yields a new ``distlift.toml``."""
+        captured = self._stub_editor(monkeypatch)
+
+        path, exit_code = open_repo_config_file_in_editor(tmp_path)
+
+        assert exit_code == 0
+        assert path == tmp_path / "distlift.toml"
+        assert path.is_file()
+        assert path.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+        assert captured["argv"][-1] == str(path)
+
+    def test_refuses_when_missing_and_no_create(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``create_if_missing=False`` raises with an ``init-repo`` hint."""
+        self._stub_editor(monkeypatch)
+
+        with pytest.raises(ConfigurationError) as excinfo:
+            open_repo_config_file_in_editor(tmp_path, create_if_missing=False)
+
+        assert "init-repo" in str(excinfo.value)

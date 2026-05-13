@@ -1,11 +1,13 @@
-"""Locate, create, and open user-level and system-level config files.
+"""Locate, create, and open distlift config files on disk.
 
 This module supports the ``distlift config init-user``,
-``distlift config init-system``, ``distlift config edit-user``, and
-``distlift config edit-system`` commands. It manages the files on disk and,
-for the ``edit-*`` commands, also resolves the merged ``editor`` setting
-from the system and user TOML layers plus ``DISTLIFT_EDITOR`` so that the
-configured editor (if any) is honored as a fallback.
+``distlift config init-system``, ``distlift config init-repo``,
+``distlift config edit-user``, ``distlift config edit-system``, and
+``distlift config edit-repo`` commands. It manages the files on disk and,
+for the ``edit-*`` commands, resolves the merged ``editor`` setting so the
+configured editor (if any) is honored as a fallback. User and system
+``edit-*`` commands load global layers only; ``edit-repo`` includes the
+repository root when resolving ``editor``.
 """
 
 from __future__ import annotations
@@ -13,9 +15,11 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
+from distlift.config.discovery import discover_local_config_paths
 from distlift.config.loader import load_config_layers
 from distlift.config.merger import merge_config_layers
 from distlift.constants import (
+    DEFAULT_LOCAL_CONFIG_FILENAMES,
     DEFAULT_SYSTEM_CONFIG_PATHS,
     DEFAULT_USER_CONFIG_PATHS,
 )
@@ -196,6 +200,158 @@ def create_config_file(
     )
 
     return path, True
+
+
+def get_repo_config_init_path(repo_root: Path) -> Path:
+    """Return the path where ``init-repo`` writes a new stub file.
+
+    Standalone repo config is ``distlift.toml`` or ``.distlift.toml``; new
+    stubs are always created as ``distlift.toml`` next to ``repo_root``.
+
+    Args:
+        repo_root: Repository root directory (absolute or relative).
+    """
+    return repo_root.resolve() / DEFAULT_LOCAL_CONFIG_FILENAMES[0]
+
+
+def _resolve_existing_repo_standalone_config_path(
+    repo_root: Path,
+) -> Path | None:
+    """Return the standalone local config file with highest merge precedence.
+
+    ``load_config_layers`` merges ``distlift.toml`` before ``.distlift.toml``,
+    so when both exist the latter wins and is the file users usually want to
+    open for editing.
+
+    Args:
+        repo_root: Repository root directory (absolute or relative).
+
+    Returns:
+        The path to open, or ``None`` when neither standalone file exists.
+    """
+    paths = discover_local_config_paths(repo_root.resolve())
+
+    if not paths:
+        return None
+
+    return paths[-1]
+
+
+def create_repo_config_file(
+    repo_root: Path,
+    *,
+    force: bool = False,
+) -> tuple[Path, bool]:
+    """Create ``distlift.toml`` under the repository root with a commented stub.
+
+    Args:
+        repo_root: Repository root directory (absolute or relative).
+        force: When True, overwrite an existing ``distlift.toml``. When False,
+            leave an existing ``distlift.toml`` untouched.
+
+    Returns:
+        A tuple ``(path, created)`` where ``path`` is ``distlift.toml`` under
+        ``repo_root``, and ``created`` is ``True`` when a new file (or an
+        overwrite via ``force``) was written.
+
+    Raises:
+        OSError: When the file or its parent directories cannot be written.
+    """
+    path = get_repo_config_init_path(repo_root)
+
+    # Skip the write when the file already exists and the caller did not
+    # ask for an overwrite, so we never clobber an edited config
+    if path.exists() and not force:
+        log.debug(
+            "Repo config file already exists at %s; not overwriting",
+            path,
+        )
+
+        return path, False
+
+    # Ensure the parent directory exists before writing the stub
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    path.write_text(STUB_CONFIG_CONTENT, encoding="utf-8", newline="\n")
+
+    log.info("Wrote repo config stub to %s", path)
+
+    return path, True
+
+
+def _resolve_repo_editor_command(repo_root: Path) -> str | None:
+    """Return the merged ``editor`` setting including repository TOML layers.
+
+    Args:
+        repo_root: Absolute repository root used when loading config layers.
+    """
+    try:
+        layers = load_config_layers(repo_root=repo_root)
+        resolved = merge_config_layers(layers)
+    except ConfigurationError:
+        log.debug(
+            "Could not load config layers for repo editor resolution at %s",
+            repo_root,
+            exc_info=True,
+        )
+
+        return None
+
+    return resolved.editor
+
+
+def open_repo_config_file_in_editor(
+    repo_root: Path,
+    *,
+    create_if_missing: bool = True,
+) -> tuple[Path, int]:
+    """Open the repository standalone config file in the user's editor.
+
+    When ``distlift.toml`` and/or ``.distlift.toml`` exist, the file that wins
+    in merge order (``.distlift.toml`` when both are present) is opened. When
+    neither exists, ``distlift.toml`` is created with the default stub unless
+    ``create_if_missing`` is False.
+
+    Args:
+        repo_root: Repository root directory (absolute or relative).
+        create_if_missing: When True (default), seed ``distlift.toml`` before
+            launching the editor when no standalone file exists. When False,
+            raise ``ConfigurationError`` instead.
+
+    Returns:
+        A tuple ``(path, exit_code)`` with the path that was opened and the
+        editor process exit code.
+
+    Raises:
+        ConfigurationError: When no editor environment variable or config
+            ``editor`` is set, or when no standalone file exists and
+            ``create_if_missing`` is False.
+        OSError: When the file or its parent directories cannot be created.
+    """
+    root = repo_root.resolve()
+    existing = _resolve_existing_repo_standalone_config_path(root)
+
+    if existing is not None:
+        path = existing
+    else:
+        path = get_repo_config_init_path(root)
+
+        if not path.exists():
+            if not create_if_missing:
+                raise ConfigurationError(
+                    f"Repo config file does not exist under {root}. Run "
+                    "'distlift config init-repo' first."
+                )
+
+            # Seed distlift.toml so the editor opens a meaningful file
+            create_repo_config_file(root, force=False)
+
+    # Honor editor from merged config (system, user, pyproject, local, env)
+    config_editor = _resolve_repo_editor_command(root)
+
+    exit_code = launch_editor_blocking(path, config_editor=config_editor)
+
+    return path, exit_code
 
 
 def _resolve_global_editor_command() -> str | None:

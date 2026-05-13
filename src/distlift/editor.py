@@ -1,8 +1,8 @@
 """Resolve and launch the user's preferred external text editor.
 
 This module centralizes editor handling so both the changelog editing flow
-and the configuration ``edit-user`` / ``edit-system`` commands share the
-same convention for picking an editor.
+and the configuration ``edit-user``, ``edit-system``, and ``edit-repo``
+commands share the same convention for picking an editor.
 """
 
 from __future__ import annotations

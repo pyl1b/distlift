@@ -242,7 +242,7 @@ class TestCLI:
 
 
 class TestConfigInitAndEditCommands:
-    """Cover ``config init-user/system`` and ``config edit-user/system``."""
+    """Cover ``config init-*`` and ``config edit-*`` for user, system, repo."""
 
     def _redirect_scopes(
         self, tmp_path: Path, monkeypatch
@@ -288,6 +288,40 @@ class TestConfigInitAndEditCommands:
             files_module,
             "_resolve_global_editor_command",
             lambda: config_editor,
+        )
+
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kwargs):  # noqa: ANN001
+            captured["argv"] = argv
+            return subprocess.CompletedProcess(argv, exit_code)
+
+        monkeypatch.setattr(editor_module.subprocess, "run", fake_run)
+        return captured
+
+    def _stub_repo_editor(
+        self,
+        monkeypatch,
+        exit_code: int = 0,
+        *,
+        config_editor: str | None = None,
+    ) -> dict[str, Any]:
+        """Replace ``subprocess.run`` and repo editor resolution for repo tests.
+
+        Args:
+            monkeypatch: Pytest monkeypatch fixture.
+            exit_code: Exit status the fake editor process reports.
+            config_editor: Value to return from the repo merged-config editor
+                resolver, isolating tests from the host's real config.
+        """
+        for key in EDITOR_ENV_VARS:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("EDITOR", "myeditor")
+
+        monkeypatch.setattr(
+            files_module,
+            "_resolve_repo_editor_command",
+            lambda _root: config_editor,
         )
 
         captured: dict[str, Any] = {}
@@ -449,3 +483,86 @@ class TestConfigInitAndEditCommands:
         assert result.exit_code == 0
         assert captured["argv"][0] == "cfg-editor"
         assert captured["argv"][-1] == str(user_path)
+
+    def test_init_repo_creates_distlift_toml(self, tmp_path: Path) -> None:
+        """``config init-repo`` writes the stub under ``--repo-root``."""
+        result = runner.invoke(
+            app,
+            ["config", "init-repo", "--repo-root", str(tmp_path)],
+        )
+
+        assert result.exit_code == 0
+        target = tmp_path / "distlift.toml"
+        assert target.is_file()
+        assert target.read_text(encoding="utf-8") == STUB_CONFIG_CONTENT
+        assert "Created repo config" in result.output
+
+    def test_init_repo_respects_existing_without_force(
+        self, tmp_path: Path
+    ) -> None:
+        """Existing ``distlift.toml`` is preserved without ``--force``."""
+        target = tmp_path / "distlift.toml"
+        target.write_text("# kept\n", encoding="utf-8")
+
+        result = runner.invoke(
+            app,
+            ["config", "init-repo", "--repo-root", str(tmp_path)],
+        )
+
+        assert result.exit_code == 0
+        assert target.read_text(encoding="utf-8") == "# kept\n"
+        assert "already exists" in result.output
+
+    def test_edit_repo_creates_then_launches_editor(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``config edit-repo`` seeds ``distlift.toml`` then invokes the editor."""
+        captured = self._stub_repo_editor(monkeypatch)
+        target = tmp_path / "distlift.toml"
+
+        result = runner.invoke(
+            app,
+            ["config", "edit-repo", "--repo-root", str(tmp_path)],
+        )
+
+        assert result.exit_code == 0
+        assert target.is_file()
+        assert captured["argv"][-1] == str(target)
+
+    def test_edit_repo_no_create_errors_when_missing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``--no-create`` refuses to seed and exits non-zero."""
+        self._stub_repo_editor(monkeypatch)
+
+        result = runner.invoke(
+            app,
+            [
+                "config",
+                "edit-repo",
+                "--repo-root",
+                str(tmp_path),
+                "--no-create",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert not (tmp_path / "distlift.toml").exists()
+        assert "init-repo" in result.output
+
+    def test_edit_repo_opens_dot_when_both_exist(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """When both local files exist, ``.distlift.toml`` is opened."""
+        (tmp_path / "distlift.toml").write_text("# a\n", encoding="utf-8")
+        dot = tmp_path / ".distlift.toml"
+        dot.write_text("# b\n", encoding="utf-8")
+        captured = self._stub_repo_editor(monkeypatch)
+
+        result = runner.invoke(
+            app,
+            ["config", "edit-repo", "--repo-root", str(tmp_path)],
+        )
+
+        assert result.exit_code == 0
+        assert captured["argv"][-1] == str(dot)

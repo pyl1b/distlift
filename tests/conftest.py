@@ -33,6 +33,20 @@ def tmp_git_repo(tmp_path: Path) -> Path:
         capture_output=True,
     )
 
+    # Avoid inheriting global GPG signing; commits must stay non-interactive.
+    subprocess.run(
+        ["git", "config", "commit.gpgsign", "false"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "tag.gpgSign", "false"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
     # Make an initial commit so HEAD exists for diff and tag operations.
     (tmp_path / "README.md").write_text("test\n")
     subprocess.run(
