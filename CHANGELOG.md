@@ -8,15 +8,20 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.5] - 2026-05-14
 
 ### Added
 
 - `build` command
-- `distlift deploy`: create and push the next CI marker tag ``{prefix}_{N}``
-  (default prefix ``deploy``); optional registry checks via
-  ``deploy.verify_indexes`` / ``--verify-indexes`` (Python: ``pip``, JS:
-  ``npm``).
+- `distlift deploy`: create and push the next CI marker tag ``{prefix}_{N}`` (default prefix ``deploy``); optional registry checks via ``deploy.verify_indexes`` / ``--verify-indexes`` (Python: ``pip``, JS: ``npm``).
+
+### Changed
+
+- Support --all-packages in simplified command
 
 ## [0.1.4] - 2026-05-13
 
@@ -66,4 +71,5 @@
 [0.1.2]: https://github.com/pyl1b/distlift/compare/v0.1.1...v0.1.2
 [0.1.3]: https://github.com/pyl1b/distlift/compare/v0.1.2...v0.1.3
 [0.1.4]: https://github.com/pyl1b/distlift/compare/v0.1.3...v0.1.4
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.4...HEAD
+[0.1.5]: https://github.com/pyl1b/distlift/compare/v0.1.4...v0.1.5
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.5...HEAD
