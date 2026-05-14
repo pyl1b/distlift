@@ -11,7 +11,7 @@ from distlift.config import files as files_module
 from distlift.config.files import STUB_CONFIG_CONTENT
 from distlift.config.models import BumpKind
 from distlift.editor import EDITOR_ENV_VARS
-from distlift.publish.models import PublishRunResult
+from distlift.publish.models import PublishResult, PublishRunResult
 from distlift.release.models import ReleaseResult
 
 runner = CliRunner()
@@ -723,3 +723,139 @@ class TestConfigInitAndEditCommands:
 
         assert result.exit_code == 0
         assert captured["argv"][-1] == str(dot)
+
+
+class TestBuildCommand:
+    """Tests for ``distlift build``."""
+
+    def test_build_invokes_run_local_build(
+        self, tmp_python_project: Path, monkeypatch
+    ) -> None:
+        """``build`` calls ``run_local_build`` and prints results."""
+        captured: dict[str, object] = {}
+
+        def fake_run_local_build(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            package_names: list[str] | None = None,
+            registry: object | None = None,
+        ) -> PublishRunResult:
+            captured["repo_root"] = repo_root
+            captured["package_names"] = package_names
+
+            return PublishRunResult(
+                success=True,
+                projects=[
+                    (
+                        "mypackage",
+                        PublishResult(success=True, artifacts=[]),
+                    )
+                ],
+            )
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_local_build",
+            fake_run_local_build,
+        )
+
+        result = runner.invoke(
+            app,
+            ["build", "--repo-root", str(tmp_python_project)],
+        )
+
+        assert result.exit_code == 0
+        assert captured["repo_root"] == tmp_python_project.resolve()
+        assert captured["package_names"] is None
+        assert "mypackage: build ok" in result.output
+
+    def test_build_unknown_monorepo_package_errors(
+        self, tmp_path: Path
+    ) -> None:
+        """Unknown ``--package`` names exit with a configuration error."""
+        (tmp_path / "distlift.toml").write_text(
+            '[release]\nmode = "monorepo"\nlanguage = "python"\n\n'
+            "[monorepo]\n"
+            'packages = ["pkg_a", "pkg_b"]\n',
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "build",
+                "--repo-root",
+                str(tmp_path),
+                "--package",
+                "ghost",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Unknown monorepo package" in result.output
+
+    def test_build_forwards_package_names_to_run_local_build(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``-p`` flags are passed through as a name list."""
+        (tmp_path / "distlift.toml").write_text(
+            '[release]\nmode = "monorepo"\nlanguage = "python"\n\n'
+            "[monorepo]\n"
+            'packages = ["pkg_a", "pkg_b"]\n',
+            encoding="utf-8",
+        )
+        captured: dict[str, object] = {}
+
+        def fake_run_local_build(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            package_names: list[str] | None = None,
+            registry: object | None = None,
+        ) -> PublishRunResult:
+            captured["package_names"] = package_names
+
+            return PublishRunResult(success=True, projects=[])
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_local_build",
+            fake_run_local_build,
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "build",
+                "--repo-root",
+                str(tmp_path),
+                "-p",
+                "pkg_b",
+                "-p",
+                "pkg_a",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert captured["package_names"] == ["pkg_b", "pkg_a"]
+
+    def test_build_package_flag_errors_in_simple_mode(
+        self, tmp_python_project: Path
+    ) -> None:
+        """``--package`` is only valid when the repo is in monorepo mode."""
+        result = runner.invoke(
+            app,
+            [
+                "build",
+                "--repo-root",
+                str(tmp_python_project),
+                "-p",
+                "nope",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "monorepo mode" in result.output

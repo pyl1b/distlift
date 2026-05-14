@@ -25,6 +25,7 @@ from distlift.deploy.models import DeployRequest
 from distlift.errors import ConfigurationError
 from distlift.logging_utils import configure_logging
 from distlift.plugins.base import DistliftPlugin
+from distlift.publish.models import PublishRunResult
 from distlift.release.models import (
     MonorepoReleaseRequest,
     SimpleReleaseRequest,
@@ -37,7 +38,8 @@ app = typer.Typer(
         "With no subcommand, bumps patch by default; use --major/--minor/"
         "--patch/--version for a different release. Updates manifests, "
         "commits, tags, and pushes. Use --build or --publish to add "
-        "distribution steps."
+        "distribution steps. Use the ``build`` subcommand to build from "
+        "manifest versions only, without releasing."
     ),
 )
 release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
@@ -364,6 +366,105 @@ def _resolve_app_config(
         config = attrs.evolve(config, version_format=fmt)
 
     return application, config
+
+
+def _echo_local_build_results(build_result: PublishRunResult) -> None:
+    """Print per-package lines for ``distlift build`` and set exit status.
+
+    Args:
+        build_result: Aggregated build outcomes from ``run_local_build``.
+    """
+    if build_result.error:
+        typer.echo(f"Build failed: {build_result.error}", err=True)
+        raise typer.Exit(1)
+
+    # One line per project (simple repo or each monorepo package)
+    for label, pr in build_result.projects:
+        if not pr.success:
+            msg = pr.error or "build failed"
+            typer.echo(f"{label}: {msg}", err=True)
+            continue
+
+        artifact_names = ", ".join(a.path.name for a in pr.artifacts)
+
+        if artifact_names:
+            typer.echo(f"{label}: built {artifact_names}")
+        else:
+            typer.echo(f"{label}: build ok")
+
+    if not build_result.success:
+        raise typer.Exit(1)
+
+
+@app.command("build")
+def build_command(
+    language: Annotated[
+        str | None,
+        typer.Option(
+            "--language", "-l", help="Target language (python, javascript)"
+        ),
+    ] = None,
+    package: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--package",
+            "-p",
+            help=(
+                "Monorepo: build only this package name (repeat for several)."
+            ),
+        ),
+    ] = None,
+    config_path: Annotated[
+        Path | None, typer.Option("--config", help="Extra config file")
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
+    repo_root: Annotated[
+        Path, typer.Option("--repo-root", help="Repository root")
+    ] = Path("."),
+) -> None:
+    """Build local distributions from current manifest versions (no release).
+
+    Does not bump versions, commit, tag, push, or publish. In monorepo mode,
+    builds every configured package unless ``--package`` selects a subset.
+
+    Args:
+        language: Optional language override for project detection.
+        package: Optional monorepo package name(s); ignored in simple mode.
+        config_path: Optional extra TOML config path.
+        verbose: When ``True``, enable verbose logging.
+        repo_root: Repository root directory path.
+    """
+    application, config = _resolve_app_config(
+        repo_root.resolve(),
+        config_path,
+        language,
+        None,
+        None,
+        None,
+        False,
+        verbose,
+    )
+
+    try:
+        validate_resolved_config(config)
+    except Exception as exc:
+        typer.echo(f"Configuration error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        build_result = application.run_local_build(
+            repo_root.resolve(),
+            config,
+            package_names=package,
+        )
+    except ConfigurationError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except Exception as exc:
+        typer.echo(f"Build failed: {exc}", err=True)
+        raise typer.Exit(1)
+
+    _echo_local_build_results(build_result)
 
 
 @release_app.command("simple")

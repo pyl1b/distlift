@@ -19,7 +19,7 @@ src/distlift/
   __init__.py          package version metadata
   __main__.py          python -m distlift entry point
   app.py               DistliftApplication — orchestration boundary between CLI and core
-  cli.py               typer CLI (release, changelog, config, plugins)
+  cli.py               typer CLI (release, build, changelog, config, plugins)
   cli_changelog.py     ``distlift changelog`` Typer subcommands
   constants.py         ENV_PREFIX, default paths, tag templates, entry-point group name
   errors.py            typed exception hierarchy

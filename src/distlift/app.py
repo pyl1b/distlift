@@ -11,12 +11,13 @@ from distlift.config.merger import merge_config_layers
 from distlift.config.models import (
     BumpKind,
     Language,
+    ManagedPackageConfig,
     ReleaseMode,
     ResolvedConfig,
 )
 from distlift.deploy.models import DeployRequest, DeployResult
 from distlift.deploy.service import run_deploy as run_deploy_service
-from distlift.errors import HookExecutionError
+from distlift.errors import ConfigurationError, HookExecutionError
 from distlift.hooks import run_config_hooks
 from distlift.monorepo.discovery import load_managed_packages
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
@@ -237,9 +238,85 @@ class DistliftApplication:
                 registry=registry,
                 release_tag_names=release_result.tag_names,
                 release_commit_sha=release_result.commit_sha,
+                monorepo_packages=None,
             )
 
         return release_result, optional
+
+    def run_local_build(
+        self,
+        repo_root: Path,
+        config: ResolvedConfig,
+        *,
+        package_names: list[str] | None = None,
+        registry: PluginRegistry | None = None,
+    ) -> PublishRunResult:
+        """Build local distributions from manifests without a release step.
+
+        Uses the version already present in each ``pyproject.toml`` or
+        ``package.json``. Does not read Git tags, bump versions, commit, tag,
+        push, or upload.
+
+        Args:
+            repo_root: Repository root directory path.
+            config: Effective merged ``ResolvedConfig``.
+            package_names: In monorepo mode, optional non-empty list of
+                package ``name`` values to build; every name must exist in
+                configuration. When ``None`` or empty, every configured package
+                is built. Must be empty or ``None`` in simple mode.
+            registry: Optional pre-built ``PluginRegistry``; when omitted, a
+                default registry is built from ``config``.
+
+        Returns:
+            Aggregated per-package build results and artifact paths.
+        """
+        # Resolve a registry once for language adapters and builders
+        if registry is None:
+            registry = self._default_registry(config)
+
+        root = repo_root.resolve()
+        names = list(package_names) if package_names else []
+
+        # Reject package filters outside monorepo mode
+        if config.mode != ReleaseMode.MONOREPO and names:
+            raise ConfigurationError(
+                "--package / -p applies only in monorepo mode "
+                f"(unknown names: {', '.join(names)})"
+            )
+
+        # Resolve which monorepo rows to build when a filter is provided
+        monorepo_slice: list[ManagedPackageConfig] | None = None
+
+        if config.mode == ReleaseMode.MONOREPO and names:
+            managed = load_managed_packages(config)
+            by_name = {pkg.name: pkg for pkg in managed}
+            missing = [n for n in names if n not in by_name]
+
+            if missing:
+                raise ConfigurationError(
+                    f"Unknown monorepo package(s): {', '.join(missing)}"
+                )
+
+            # Preserve ``--package`` order; omit duplicate names
+            seen: set[str] = set()
+            monorepo_slice = []
+
+            for n in names:
+                if n not in seen:
+                    seen.add(n)
+                    monorepo_slice.append(by_name[n])
+
+        return self._run_optional_build_publish(
+            root,
+            config,
+            dry_run=False,
+            build=True,
+            publish=False,
+            registry=registry,
+            release_tag_names=None,
+            release_commit_sha=None,
+            monorepo_packages=monorepo_slice,
+        )
 
     def _build_publish_package_with_hooks(
         self,
@@ -346,6 +423,7 @@ class DistliftApplication:
         registry: PluginRegistry,
         release_tag_names: list[str] | None = None,
         release_commit_sha: str | None = None,
+        monorepo_packages: list[ManagedPackageConfig] | None = None,
     ) -> PublishRunResult:
         """Build and optionally publish per targeted package root.
 
@@ -360,6 +438,8 @@ class DistliftApplication:
             registry: Loaded plugin registry (must match release planning).
             release_tag_names: Tags created by the release run, if any.
             release_commit_sha: Release commit created by the release run.
+            monorepo_packages: When set in monorepo mode, build only these
+                managed package rows instead of every configured package.
 
         Returns:
             One result row per targeted package or project root.
@@ -367,8 +447,14 @@ class DistliftApplication:
         projects_out: list[tuple[str, PublishResult]] = []
 
         if config.mode == ReleaseMode.MONOREPO:
-            # One cycle per declared monorepo package
-            for pkg in load_managed_packages(config):
+            # One cycle per declared (or caller-selected) monorepo package
+            pkg_rows = (
+                monorepo_packages
+                if monorepo_packages is not None
+                else load_managed_packages(config)
+            )
+
+            for pkg in pkg_rows:
                 pkg_root = (repo_root / pkg.path).resolve()
                 pkg_config = (
                     attrs.evolve(config, language=pkg.language)
