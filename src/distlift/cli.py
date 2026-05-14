@@ -1182,10 +1182,12 @@ def deploy_command(
         raise typer.Exit(1)
 
     if not result.success:
-        typer.echo(result.error or "Deploy failed", err=True)
+        # Print one line per failed index check only; ``DeployResult.error``
+        # repeats the same ``detail`` text and is omitted here on purpose.
+        failed_checks = [c for c in result.checks if not c.ok]
 
-        for check in result.checks:
-            if not check.ok:
+        if failed_checks:
+            for check in failed_checks:
                 typer.echo(
                     "  {} ({}): {}".format(
                         check.label,
@@ -1194,6 +1196,8 @@ def deploy_command(
                     ),
                     err=True,
                 )
+        else:
+            typer.echo(result.error or "Deploy failed", err=True)
 
         raise typer.Exit(1)
 
