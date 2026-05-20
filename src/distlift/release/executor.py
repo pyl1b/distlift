@@ -53,7 +53,7 @@ def _log_release_execution_failure(exc: BaseException) -> None:
 
 
 def _get_adapter(
-    registry: PluginRegistry, language: Language
+    registry: PluginRegistry, language: Language | None
 ) -> ProjectAdapter:
     """Return a project adapter for the registered language plugin.
 
@@ -70,6 +70,12 @@ def _get_adapter(
         PythonProjectPlugin,
     )
 
+    if language is None:
+        from distlift.errors import UnsupportedLanguageError
+
+        raise UnsupportedLanguageError(
+            "Cannot resolve adapter: no language specified"
+        )
     plugin = registry.get_language_plugin(language.value)
     if isinstance(plugin, PythonProjectPlugin):
         return PythonProjectAdapter()
@@ -302,6 +308,8 @@ class ReleaseExecutor:
         Args:
             plan: Release plan whose packages may need manifest updates.
         """
+        from distlift.manifests.handler import get_handler
+
         for pkg_plan in plan.packages:
             if not pkg_plan.update_manifest:
                 log.debug(
@@ -310,8 +318,37 @@ class ReleaseExecutor:
                 )
                 continue
 
-            adapter = _get_adapter(self.registry, pkg_plan.target.language)
             version_str = str(pkg_plan.resolved_version.next)
+
+            # New path: write each configured version file
+            if pkg_plan.version_files_to_update:
+                for vf in pkg_plan.version_files_to_update:
+                    handler = get_handler(vf.kind)
+                    if handler is None:
+                        log.warning(
+                            "No handler for manifest kind %r; skipping %s",
+                            vf.kind,
+                            vf.path,
+                        )
+                        continue
+                    log.info(
+                        "Updating %s (%s) to %s",
+                        vf.path,
+                        vf.kind,
+                        version_str,
+                    )
+                    handler.write_version(vf.path, version_str)
+                continue
+
+            # Legacy path: single manifest via language adapter
+            if pkg_plan.target.language is None:
+                log.debug(
+                    "No language and no version_files for %s; skipping",
+                    pkg_plan.target.package_name or "package",
+                )
+                continue
+
+            adapter = _get_adapter(self.registry, pkg_plan.target.language)
             log.info(
                 "Updating manifest %s to %s",
                 pkg_plan.target.manifest_path,

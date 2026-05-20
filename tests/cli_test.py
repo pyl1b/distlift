@@ -243,8 +243,7 @@ class TestCLI:
             ],
         )
         assert result.exit_code == 1
-        combined = (result.stdout or "") + (result.stderr or "")
-        assert "Cancelled" in combined
+        assert "Cancelled" in result.output
 
     def test_no_subcommand_forwards_build_and_publish_flags(
         self, tmp_python_project: Path, monkeypatch

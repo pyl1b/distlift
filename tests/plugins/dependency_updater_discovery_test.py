@@ -133,6 +133,7 @@ install = subprocess.run(
 )
 if install.returncode != 0:
     raise SystemExit(install.stderr)
+sys.path.insert(0, {str(out)!r})
 entry_map = {{
     ep.name: ep
     for ep in importlib.metadata.entry_points(group="distlift.plugins")

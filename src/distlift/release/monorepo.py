@@ -8,9 +8,11 @@ from distlift.config.models import (
     Language,
     ManagedPackageConfig,
     ResolvedConfig,
+    VersionSource,
 )
 from distlift.errors import UnsupportedLanguageError
 from distlift.languages.base import ProjectAdapter
+from distlift.manifests.handler import get_handler, kind_for_language
 from distlift.monorepo.change_detector import (
     find_changed_packages,
 )
@@ -25,9 +27,18 @@ from distlift.release.models import (
     PackageReleasePlan,
     ReleasePlan,
     ReleaseTarget,
+    ResolvedVersionFile,
 )
 from distlift.release.planner import plan_monorepo_release
+from distlift.release.version_files import (
+    primary_version_file,
+    resolve_version_files,
+    validate_version_files,
+)
 from distlift.vcs.git import GitRepository
+from distlift.versioning.bump import coerce_initial_version
+from distlift.versioning.models import VersionParts
+from distlift.versioning.parser import parse_version
 from distlift.versioning.resolver import (
     resolve_current_version,
     resolve_next_version,
@@ -62,13 +73,46 @@ def _adapter_for(
     )
 
 
+def _current_from_manifest(
+    primary: ResolvedVersionFile,
+    default_version: str,
+    fmt: object,
+) -> VersionParts:
+    """Read the current version from the primary manifest file.
+
+    Args:
+        primary: Primary version file to read from.
+        default_version: Fallback when no version is declared.
+        fmt: Version format for coercion of the default version.
+    """
+    from distlift.config.models import VersionFormat
+
+    assert isinstance(fmt, VersionFormat)
+    handler = get_handler(primary.kind)
+
+    if handler is None:
+        return coerce_initial_version(default_version, fmt)
+
+    raw = handler.read_version(primary.path)
+
+    if raw:
+        return parse_version(raw, fmt)
+
+    return coerce_initial_version(default_version, fmt)
+
+
+def _is_dynamic_file(f: ResolvedVersionFile) -> bool:
+    handler = get_handler(f.kind)
+    return handler.is_dynamic(f.path) if handler else False
+
+
 def discover_managed_targets(
     packages: list[ManagedPackageConfig],
     repo_root: Path,
     config: ResolvedConfig,
     registry: PluginRegistry,
-) -> list[ReleaseTarget]:
-    """Build a ReleaseTarget for each managed package declaration.
+) -> list[tuple[ReleaseTarget, list[ResolvedVersionFile]]]:
+    """Build a (ReleaseTarget, resolved_files) pair for each managed package.
 
     Args:
         packages: Monorepo package entries from configuration.
@@ -76,8 +120,40 @@ def discover_managed_targets(
         config: Resolved configuration for default language fallbacks.
         registry: Plugin registry (reserved for future per-package wiring).
     """
-    targets = []
+    result = []
+
     for pkg in packages:
+        pkg_root = repo_root / pkg.path
+
+        # New path: explicit version_files on the package entry
+        if pkg.version_files:
+            resolved = resolve_version_files(pkg.version_files, pkg_root)
+            validate_version_files(resolved, pkg.version_source, pkg.name)
+
+            language = pkg.language or config.language
+            if language is None:
+                pf = primary_version_file(resolved)
+                if pf is not None:
+                    for lang in Language:
+                        if kind_for_language(str(lang)) == pf.kind:
+                            language = lang
+                            break
+
+            pf = primary_version_file(resolved)
+            manifest = pf.path if pf else None
+
+            target = ReleaseTarget(
+                language=language,
+                root=pkg_root,
+                manifest_path=manifest,
+                version_source=pkg.version_source,
+                package_name=pkg.name,
+                version_files=resolved,
+            )
+            result.append((target, resolved))
+            continue
+
+        # Legacy path: language + manifest_path
         language = pkg.language or config.language
         if language is None:
             raise UnsupportedLanguageError(
@@ -85,31 +161,33 @@ def discover_managed_targets(
                 "and no repository default exists"
             )
         manifest = resolve_package_manifest_path(pkg, repo_root)
-        targets.append(
-            ReleaseTarget(
-                language=language,
-                root=repo_root / pkg.path,
-                manifest_path=manifest,
-                version_source=pkg.version_source,
-                package_name=pkg.name,
-            )
+        target = ReleaseTarget(
+            language=language,
+            root=pkg_root,
+            manifest_path=manifest,
+            version_source=pkg.version_source,
+            package_name=pkg.name,
         )
-    return targets
+        result.append((target, []))
+
+    return result
 
 
 def select_changed_targets(
     packages: list[ManagedPackageConfig],
-    targets: list[ReleaseTarget],
+    pairs: list[tuple[ReleaseTarget, list[ResolvedVersionFile]]],
     tags: list[str],
     git: GitRepository,
     selected_names: list[str] | None,
     all_changed: bool,
-) -> list[tuple[ManagedPackageConfig, ReleaseTarget]]:
-    """Pair managed packages with targets that should be part of this release.
+) -> list[
+    tuple[ManagedPackageConfig, ReleaseTarget, list[ResolvedVersionFile]]
+]:
+    """Return (pkg, target, files) triples that should be part of this release.
 
     Args:
         packages: Declared managed packages in configuration order.
-        targets: Parallel list of release targets for those packages.
+        pairs: Parallel list of (target, resolved_files) for those packages.
         tags: Existing tag names used for change detection.
         git: Repository handle for diff-based change detection.
         selected_names: Optional filter of package names to include.
@@ -127,8 +205,8 @@ def select_changed_targets(
 
     changed_names = {p.name for p in changed_pkgs}
     return [
-        (pkg, tgt)
-        for pkg, tgt in zip(packages, targets)
+        (pkg, tgt, files)
+        for pkg, (tgt, files) in zip(packages, pairs)
         if pkg.name in changed_names
     ]
 
@@ -147,30 +225,44 @@ def compute_monorepo_release_plan(
     git.ensure_clean_worktree()
 
     packages = load_managed_packages(request.config)
-    targets = discover_managed_targets(
+    pairs = discover_managed_targets(
         packages, request.repo_root, request.config, registry
     )
     tags = git.get_tags()
 
     selected_names = request.selected_packages or None
-    pairs = select_changed_targets(
-        packages, targets, tags, git, selected_names, request.all_changed
+    triples = select_changed_targets(
+        packages, pairs, tags, git, selected_names, request.all_changed
     )
 
     pkg_plans: list[PackageReleasePlan] = []
 
-    # Resolve next version and manifest policy per selected package pair
-    for pkg, tgt in pairs:
+    for pkg, tgt, resolved_files in triples:
         template = pkg.tag_template or f"v{{version}}-{pkg.name}"
         fmt = pkg.version_format
 
-        current = resolve_current_version(
-            tags=tags,
-            template=template,
-            fmt=fmt,
-            default_version=pkg.default_version,
-            package_name=pkg.name,
-        )
+        # Version resolution: manifest source reads from primary file
+        if pkg.version_source == VersionSource.MANIFEST and resolved_files:
+            pf = primary_version_file(resolved_files)
+            if pf is not None:
+                current = _current_from_manifest(pf, pkg.default_version, fmt)
+            else:
+                current = resolve_current_version(
+                    tags=tags,
+                    template=template,
+                    fmt=fmt,
+                    default_version=pkg.default_version,
+                    package_name=pkg.name,
+                )
+        else:
+            current = resolve_current_version(
+                tags=tags,
+                template=template,
+                fmt=fmt,
+                default_version=pkg.default_version,
+                package_name=pkg.name,
+            )
+
         resolved = resolve_next_version(
             current=current,
             bump=request.default_bump
@@ -182,16 +274,40 @@ def compute_monorepo_release_plan(
             package_name=pkg.name,
         )
 
-        adapter = _adapter_for(registry, tgt.language)
-        update_manifest = not adapter.is_dynamic_version(tgt)
+        # Dynamic-version detection: prefer version-files path
+        if resolved_files:
+            pf = primary_version_file(resolved_files)
+            is_dynamic = _is_dynamic_file(pf) if pf is not None else False
+        else:
+            adapter = _adapter_for(registry, tgt.language)
+            is_dynamic = adapter.is_dynamic_version(tgt)
+
+        update_manifest = not is_dynamic
+        files_to_update = (
+            [f for f in resolved_files if f.update and not _is_dynamic_file(f)]
+            if resolved_files
+            else []
+        )
 
         pkg_plans.append(
             PackageReleasePlan(
                 target=tgt,
                 resolved_version=resolved,
                 update_manifest=update_manifest,
+                version_files_to_update=files_to_update,
             )
         )
+
+    # Duplicate tag validation
+    seen_tags: set[str] = set()
+    for pp in pkg_plans:
+        tag = pp.resolved_version.tag_name
+        if tag in seen_tags:
+            raise ValueError(
+                f"Duplicate planned tag name {tag!r}. Two packages would "
+                "create the same tag — check tag_template settings."
+            )
+        seen_tags.add(tag)
 
     plan = plan_monorepo_release(
         pkg_plans, request.config, request.repo_root, request.dry_run

@@ -68,10 +68,11 @@ def collect_deploy_targets(
 
     if config.mode == ReleaseMode.MONOREPO:
         packages = load_managed_packages(config)
+        pairs = discover_managed_targets(packages, root, config, registry)
+        return [target for target, _ in pairs]
 
-        return discover_managed_targets(packages, root, config, registry)
-
-    return [prepare_simple_target(root, config, registry)]
+    target, _ = prepare_simple_target(root, config, registry)
+    return [target]
 
 
 def _effective_tag_prefix(request: DeployRequest) -> str:

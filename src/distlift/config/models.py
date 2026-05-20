@@ -206,6 +206,31 @@ class DependencyUpdatesConfig:
 
 
 @attrs.define
+class VersionFileConfig:
+    """One manifest file that participates in a release unit's version handling.
+
+    Attributes:
+        path: File path, repo-relative or package-root-relative.
+        kind: Manifest kind string such as ``"pyproject"`` or
+            ``"package-json"``.  Plugin-registered kinds are accepted; use
+            ``None`` to infer from ``language`` when a language shorthand is
+            provided instead.
+        language: Optional language shorthand used to derive ``kind`` when
+            ``kind`` is ``None``.
+        primary: When True this file supplies the current manifest version for
+            ``version_source = "manifest"`` release units.  Exactly one file
+            per unit must be primary when version_source is manifest.
+        update: When False this file is read but not written during a release.
+    """
+
+    path: str | None = None
+    kind: str | None = None
+    language: Language | None = None
+    primary: bool = False
+    update: bool = True
+
+
+@attrs.define
 class ManagedPackageConfig:
     """One monorepo package entry loaded from configuration.
 
@@ -223,6 +248,11 @@ class ManagedPackageConfig:
             does not trigger dependency autoupdates in dependents.
         dependency_updates_receive_enabled: When False, this package's manifest
             is not updated when another released package is a dependency.
+        version_files: Explicit version files for this package.  When present
+            these take precedence over ``language`` / ``manifest_path``.
+        change_paths: Optional subtree paths used for change detection instead
+            of the package ``path``.  Useful when one release unit spans
+            multiple directories (e.g. ``backend`` and ``web``).
     """
 
     name: str
@@ -236,6 +266,8 @@ class ManagedPackageConfig:
     changelog_path: str | None = None
     dependency_updates_trigger_enabled: bool = True
     dependency_updates_receive_enabled: bool = True
+    version_files: list[VersionFileConfig] = attrs.Factory(list)
+    change_paths: list[str] = attrs.Factory(list)
 
 
 @attrs.define
@@ -296,6 +328,62 @@ class HooksConfig:
     dependencies_autoupdated: list[HookSpec] = attrs.Factory(list)
 
 
+@attrs.define
+class BuildTargetConfig:
+    """One explicit build target for ``distlift build``.
+
+    Attributes:
+        name: Unique label for this target.
+        path: Repository-relative directory that is the build root.
+        ecosystem: How to build: ``"python"``, ``"npm"``, or ``"shell"``.
+        command: Shell command used when ``ecosystem = "shell"``.
+        artifacts: Glob patterns for artifacts produced by a shell build.
+    """
+
+    name: str
+    path: str = "."
+    ecosystem: str = "python"
+    command: str | None = None
+    artifacts: list[str] = attrs.Factory(list)
+
+
+@attrs.define
+class PublishTargetConfig:
+    """One explicit publish target for ``distlift publish``.
+
+    Attributes:
+        name: Unique label for this target.
+        path: Repository-relative directory that is the publish root.
+        ecosystem: Registry type: ``"python"`` (PyPI) or ``"npm"``.
+    """
+
+    name: str
+    path: str = "."
+    ecosystem: str = "python"
+
+
+@attrs.define
+class BuildConfig:
+    """Explicit build target list for ``distlift build``.
+
+    Attributes:
+        targets: Ordered list of build target entries.
+    """
+
+    targets: list[BuildTargetConfig] = attrs.Factory(list)
+
+
+@attrs.define
+class PublishConfig:
+    """Explicit publish target list for ``distlift publish``.
+
+    Attributes:
+        targets: Ordered list of publish target entries.
+    """
+
+    targets: list[PublishTargetConfig] = attrs.Factory(list)
+
+
 def _empty_hooks_config() -> HooksConfig:
     """Return a ``HooksConfig`` with no hooks registered.
 
@@ -337,6 +425,7 @@ class RawConfig:
         tag_template: Tag naming template including a version placeholder.
         version_source: Whether versions come from manifest or tags.
         manifest_path: Optional explicit manifest path as a string path.
+        version_files: Top-level version files for simple mode.
         editor: Optional external editor command used as a fallback when no
             ``GIT_EDITOR`` / ``VISUAL`` / ``EDITOR`` env var is set.
         plugins: Plugin-related fields contributed by this layer.
@@ -360,6 +449,7 @@ class RawConfig:
     tag_template: str | None = None
     version_source: VersionSource | None = None
     manifest_path: str | None = None
+    version_files: list[VersionFileConfig] = attrs.Factory(list)
     editor: str | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
@@ -370,6 +460,8 @@ class RawConfig:
     )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     hooks_append: HooksConfig = attrs.Factory(_empty_hooks_config)
+    build: BuildConfig = attrs.Factory(BuildConfig)
+    publish: PublishConfig = attrs.Factory(PublishConfig)
     source: str = "<unknown>"
 
 
@@ -408,6 +500,7 @@ class ResolvedConfig:
     tag_template: str = DEFAULT_TAG_TEMPLATE
     version_source: VersionSource = VersionSource.MANIFEST
     manifest_path: Path | None = None
+    version_files: list[VersionFileConfig] = attrs.Factory(list)
     editor: str | None = None
     plugins: PluginConfig = attrs.Factory(PluginConfig)
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
@@ -417,4 +510,6 @@ class ResolvedConfig:
         DependencyUpdatesConfig
     )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
+    build: BuildConfig = attrs.Factory(BuildConfig)
+    publish: PublishConfig = attrs.Factory(PublishConfig)
     field_sources: dict[str, str] = attrs.Factory(dict)

@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from distlift.config.models import (
+    BuildConfig,
+    BuildTargetConfig,
     DependencyUpdateRule,
     DependencyUpdatesConfig,
     ExternalMonorepoDependencyUpdateConfig,
@@ -19,8 +21,11 @@ from distlift.config.models import (
     ManagedPackageConfig,
     MonorepoConfig,
     PluginConfig,
+    PublishConfig,
+    PublishTargetConfig,
     RawConfig,
     ReleaseMode,
+    VersionFileConfig,
     VersionFormat,
     VersionSource,
 )
@@ -153,8 +158,10 @@ def _external_monorepo_from_mapping(
     )
 
 
-def dependency_updates_from_mapping(mapping: Any) -> DependencyUpdatesConfig:
-    """Build ``DependencyUpdatesConfig`` from a parsed ``[dependency_updates]`` table.
+def dependency_updates_from_mapping(
+    mapping: Any,
+) -> DependencyUpdatesConfig:
+    """Build ``DependencyUpdatesConfig`` from a ``[dependency_updates]`` table.
 
     Args:
         mapping: Parsed mapping for the dependency_updates section.
@@ -499,6 +506,55 @@ def load_environment_config(
     return result
 
 
+def _version_file_from_mapping(item: Any, source: str) -> VersionFileConfig:
+    """Parse one ``[[version_files]]`` table entry.
+
+    Args:
+        item: Mapping with version file fields from TOML.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(item, Mapping):
+        raise ConfigurationError(
+            f"Each version_files entry must be a table ({source})"
+        )
+
+    path_raw = item.get("path")
+    kind_raw = item.get("kind")
+    lang_raw = item.get("language")
+    primary = item.get("primary", False)
+    update = item.get("update", True)
+
+    language: Language | None = None
+    if lang_raw is not None:
+        try:
+            language = Language(str(lang_raw))
+        except ValueError:
+            raise ConfigurationError(
+                f"version_files entry has unknown language {lang_raw!r}"
+                f" ({source})"
+            )
+
+    return VersionFileConfig(
+        path=str(path_raw).strip() if isinstance(path_raw, str) else None,
+        kind=str(kind_raw).strip() if isinstance(kind_raw, str) else None,
+        language=language,
+        primary=bool(primary),
+        update=bool(update),
+    )
+
+
+def _version_files_from_list(raw: Any, source: str) -> list[VersionFileConfig]:
+    """Parse a list of version file table entries.
+
+    Args:
+        raw: Sequence of version file mappings from TOML.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(raw, list):
+        return []
+    return [_version_file_from_mapping(item, source) for item in raw]
+
+
 def _managed_package_from_monorepo_item(
     item: Any, source: str
 ) -> ManagedPackageConfig:
@@ -524,7 +580,8 @@ def _managed_package_from_monorepo_item(
 
         if not name or name in {".", ".."}:
             raise ConfigurationError(
-                f"Cannot derive monorepo package name from path {path!r} ({source})"
+                f"Cannot derive monorepo package name from path "
+                f"{path!r} ({source})"
             )
 
         return ManagedPackageConfig(
@@ -539,14 +596,15 @@ def _managed_package_from_monorepo_item(
 
         if not isinstance(name_raw, str) or not name_raw.strip():
             raise ConfigurationError(
-                f"Monorepo package entry requires a non-empty string 'name' ({source})"
+                "Monorepo package entry requires a non-empty string"
+                f" 'name' ({source})"
             )
 
         if not isinstance(path_raw, str) or not path_raw.strip():
             label = name_raw.strip()
             raise ConfigurationError(
-                f"Monorepo package entry {label!r} requires a non-empty string 'path' "
-                f"({source})"
+                f"Monorepo package entry {label!r} requires a"
+                f" non-empty string 'path' ({source})"
             )
 
         pkg = item
@@ -567,6 +625,17 @@ def _managed_package_from_monorepo_item(
                 f"({source})"
             )
 
+        version_files = _version_files_from_list(
+            pkg.get("version_files", []), source
+        )
+
+        change_paths_raw = pkg.get("change_paths", [])
+        change_paths: list[str] = []
+        if isinstance(change_paths_raw, list):
+            change_paths = [
+                str(p).strip() for p in change_paths_raw if str(p).strip()
+            ]
+
         return ManagedPackageConfig(
             name=name_raw.strip(),
             path=path_raw.strip(),
@@ -583,12 +652,109 @@ def _managed_package_from_monorepo_item(
             changelog_path=pkg.get("changelog_path"),
             dependency_updates_trigger_enabled=trigger_enabled,
             dependency_updates_receive_enabled=receive_enabled,
+            version_files=version_files,
+            change_paths=change_paths,
         )
 
     raise ConfigurationError(
         f"Each monorepo.packages entry must be a path string or a table; "
         f"got {type(item).__name__} ({source})"
     )
+
+
+def _build_target_from_mapping(item: Any, source: str) -> BuildTargetConfig:
+    """Parse one ``[[build.targets]]`` table entry.
+
+    Args:
+        item: Mapping with build target fields from TOML.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(item, Mapping):
+        raise ConfigurationError(
+            f"Each build.targets entry must be a table ({source})"
+        )
+
+    name_raw = item.get("name")
+    if not isinstance(name_raw, str) or not name_raw.strip():
+        raise ConfigurationError(
+            f"build.targets entry requires non-empty 'name' ({source})"
+        )
+
+    artifacts_raw = item.get("artifacts", [])
+    artifacts: list[str] = []
+    if isinstance(artifacts_raw, list):
+        artifacts = [str(a) for a in artifacts_raw]
+
+    return BuildTargetConfig(
+        name=name_raw.strip(),
+        path=str(item.get("path", ".")).strip() or ".",
+        ecosystem=str(item.get("ecosystem", "python")).strip(),
+        command=str(item["command"]).strip()
+        if isinstance(item.get("command"), str)
+        else None,
+        artifacts=artifacts,
+    )
+
+
+def _build_config_from_mapping(mapping: Any, source: str) -> BuildConfig:
+    """Build a ``BuildConfig`` from a parsed ``[build]`` section.
+
+    Args:
+        mapping: Parsed mapping for the build section.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(mapping, dict):
+        return BuildConfig()
+
+    targets: list[BuildTargetConfig] = []
+    for item in mapping.get("targets", []):
+        targets.append(_build_target_from_mapping(item, source))
+
+    return BuildConfig(targets=targets)
+
+
+def _publish_target_from_mapping(
+    item: Any, source: str
+) -> PublishTargetConfig:
+    """Parse one ``[[publish.targets]]`` table entry.
+
+    Args:
+        item: Mapping with publish target fields from TOML.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(item, Mapping):
+        raise ConfigurationError(
+            f"Each publish.targets entry must be a table ({source})"
+        )
+
+    name_raw = item.get("name")
+    if not isinstance(name_raw, str) or not name_raw.strip():
+        raise ConfigurationError(
+            f"publish.targets entry requires non-empty 'name' ({source})"
+        )
+
+    return PublishTargetConfig(
+        name=name_raw.strip(),
+        path=str(item.get("path", ".")).strip() or ".",
+        ecosystem=str(item.get("ecosystem", "python")).strip(),
+    )
+
+
+def _publish_config_from_mapping(mapping: Any, source: str) -> PublishConfig:
+    """Build a ``PublishConfig`` from a parsed ``[publish]`` section.
+
+    Args:
+        mapping: Parsed mapping for the publish section.
+        source: Config layer label included in error messages.
+    """
+    if not isinstance(mapping, dict):
+        return PublishConfig()
+
+    targets: list[PublishTargetConfig] = []
+    for item in mapping.get("targets", []):
+        targets.append(_publish_target_from_mapping(item, source))
+
+    return PublishConfig(targets=targets)
 
 
 def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
@@ -625,6 +791,11 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
     remotes = release.get("remotes", [])
     tag_template = release.get("tag_template")
     manifest_path = release.get("manifest_path")
+
+    # Top-level version_files (simple mode)
+    version_files = _version_files_from_list(
+        data.get("version_files", []), source
+    )
 
     # Optional editor fallback used when GIT_EDITOR/VISUAL/EDITOR are unset
     raw_editor = release.get("editor")
@@ -672,6 +843,11 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
     else:
         hooks_append = hooks_config_from_mapping(hooks_append_raw or {})
 
+    build_config = _build_config_from_mapping(data.get("build", {}), source)
+    publish_config = _publish_config_from_mapping(
+        data.get("publish", {}), source
+    )
+
     return RawConfig(
         language=language,
         mode=mode,
@@ -681,6 +857,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         tag_template=tag_template,
         version_source=version_source,
         manifest_path=manifest_path,
+        version_files=version_files,
         editor=editor,
         plugins=plugin_config,
         monorepo=monorepo_config,
@@ -689,6 +866,8 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         dependency_updates=dependency_updates,
         hooks=hooks,
         hooks_append=hooks_append,
+        build=build_config,
+        publish=publish_config,
         source=source,
     )
 

@@ -39,6 +39,11 @@ def package_has_changes_since_tag(
 ) -> bool:
     """Return True when ``git diff`` shows paths under the package directory.
 
+    When ``package.change_paths`` is set, each path in that list is checked
+    instead of ``package.path``.  This lets a release unit watch multiple
+    subtrees (e.g. ``backend`` and ``web``) without making ``path = "."``
+    treat every change in the repo as relevant.
+
     Args:
         package: Managed package whose relative ``path`` is inspected.
         tag: Previous release tag, or None to treat the package as changed.
@@ -48,10 +53,7 @@ def package_has_changes_since_tag(
         True when the package subtree differs since ``tag``, when ``tag`` is
         missing, or when change detection fails conservatively.
     """
-    pkg_path = Path(package.path)
-
     if tag is None:
-        # Without a baseline tag the package is always eligible for release
         return True
 
     try:
@@ -65,13 +67,19 @@ def package_has_changes_since_tag(
         )
         return True
 
-    # Any changed file inside the package subtree counts as a content change
+    watch_paths = (
+        [Path(p) for p in package.change_paths]
+        if package.change_paths
+        else [Path(package.path)]
+    )
+
     for f in changed:
-        try:
-            f.relative_to(git.root / pkg_path)
-            return True
-        except ValueError:
-            continue
+        for watch in watch_paths:
+            try:
+                f.relative_to(git.root / watch)
+                return True
+            except ValueError:
+                continue
 
     return False
 

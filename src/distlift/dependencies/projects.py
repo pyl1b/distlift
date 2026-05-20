@@ -103,9 +103,9 @@ def dependency_projects_from_config(
     from distlift.release.monorepo import discover_managed_targets
 
     packages = load_managed_packages(config)
-    targets = discover_managed_targets(packages, repo_root, config, registry)
+    pairs = discover_managed_targets(packages, repo_root, config, registry)
 
-    return [dependency_project_from_target(t) for t in targets]
+    return [dependency_project_from_target(target) for target, _ in pairs]
 
 
 def load_external_monorepo_projects(

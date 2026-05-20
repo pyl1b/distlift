@@ -118,7 +118,7 @@ def _resolve_changelog_targets(
         typer.echo("--package is only valid in monorepo mode", err=True)
         raise typer.Exit(1)
 
-    target = prepare_simple_target(repo_root, config, registry)
+    target, _ = prepare_simple_target(repo_root, config, registry)
 
     changelog_path = (repo_root / config.changelog.path).resolve()
 

@@ -51,6 +51,7 @@ def plan_simple_release(
     resolved_version: ResolvedVersion,
     config: ResolvedConfig,
     dry_run: bool = False,
+    package_plan: PackageReleasePlan | None = None,
 ) -> ReleasePlan:
     """Assemble a simple-mode release plan for a single target.
 
@@ -59,13 +60,17 @@ def plan_simple_release(
         resolved_version: Current and next versions plus tag name.
         config: Resolved global configuration (remotes, templates, etc.).
         dry_run: When True, marks the plan as a simulation-only run.
+        package_plan: Optional pre-built package plan; when supplied the
+            ``target``/``resolved_version`` arguments are still used for the
+            tag name and commit message but the caller's plan is stored.
     """
-    update_manifest = not _is_dynamic(target)
-    package_plan = PackageReleasePlan(
-        target=target,
-        resolved_version=resolved_version,
-        update_manifest=update_manifest,
-    )
+    if package_plan is None:
+        update_manifest = not _is_dynamic(target)
+        package_plan = PackageReleasePlan(
+            target=target,
+            resolved_version=resolved_version,
+            update_manifest=update_manifest,
+        )
     commit_msg = build_commit_message([package_plan])
     return ReleasePlan(
         mode=ReleaseMode.SIMPLE,

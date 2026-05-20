@@ -72,11 +72,9 @@ def _collect_artifacts_for_target(
 
     root = target.root
 
-    # Dispatch to the Python builder when the target is a Python project
     if target.language == Language.PYTHON:
         return build_python_distributions(root)
 
-    # Dispatch to the JavaScript builder when the target is a JS project
     if target.language == Language.JAVASCRIPT:
         return build_javascript_distributions(
             root, package_manager=package_manager
@@ -85,7 +83,91 @@ def _collect_artifacts_for_target(
     from distlift.errors import UnsupportedLanguageError
 
     raise UnsupportedLanguageError(
-        f"Cannot build: unsupported language {target.language.value}"
+        f"Cannot build: unsupported language {target.language!r}"
+    )
+
+
+def _collect_artifacts_for_ecosystem(
+    root: Path,
+    ecosystem: str,
+    command: str | None = None,
+    artifacts_globs: list[str] | None = None,
+    package_manager: str = "npm",
+) -> list[BuildArtifact]:
+    """Build artifacts using an explicit ecosystem string.
+
+    Args:
+        root: Directory to run the build in.
+        ecosystem: ``"python"``, ``"npm"``, or ``"shell"``.
+        command: Shell command used when ecosystem is ``"shell"``.
+        artifacts_globs: Glob patterns for shell build outputs.
+        package_manager: npm/pnpm/yarn for JavaScript projects.
+    """
+    from distlift.publish.javascript import build_javascript_distributions
+    from distlift.publish.python import build_python_distributions
+
+    if ecosystem == "python":
+        return build_python_distributions(root)
+
+    if ecosystem in ("npm", "javascript"):
+        return build_javascript_distributions(
+            root, package_manager=package_manager
+        )
+
+    if ecosystem == "shell":
+        import glob as _glob
+        import subprocess
+
+        if not command:
+            raise ConfigurationError(
+                "build target with ecosystem='shell' requires a 'command'"
+            )
+        subprocess.run(command, shell=True, cwd=root, check=True)
+        found: list[BuildArtifact] = []
+        for pattern in artifacts_globs or []:
+            for match in _glob.glob(str(root / pattern)):
+                found.append(BuildArtifact(path=Path(match)))
+        return found
+
+    raise ConfigurationError(
+        f"Unknown build ecosystem {ecosystem!r}; expected python, npm, or shell"
+    )
+
+
+def _publish_artifacts_for_ecosystem(
+    root: Path,
+    ecosystem: str,
+    artifacts: list[BuildArtifact],
+    dry_run: bool,
+    package_manager: str = "npm",
+) -> PublishResult:
+    """Publish already-built artifacts using an explicit ecosystem string.
+
+    Args:
+        root: Build root (used for context).
+        ecosystem: ``"python"`` or ``"npm"``.
+        artifacts: Artifacts to upload.
+        dry_run: When True, skip actual uploads.
+        package_manager: npm/pnpm/yarn for JavaScript projects.
+    """
+    from distlift.publish.javascript import publish_javascript_distributions
+    from distlift.publish.python import publish_python_distributions
+
+    request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
+
+    if ecosystem == "python":
+        return publish_python_distributions(request)
+
+    if ecosystem in ("npm", "javascript"):
+        return publish_javascript_distributions(
+            request, package_manager=package_manager
+        )
+
+    if ecosystem == "shell":
+        return PublishResult(success=True, artifacts=list(artifacts))
+
+    raise ConfigurationError(
+        f"Unknown publish ecosystem {ecosystem!r}; expected python or npm"
     )
 
 
@@ -95,28 +177,22 @@ def _publish_built_artifacts(
     dry_run: bool,
     package_manager: str = "npm",
 ) -> PublishResult:
-    """Upload already-built artifacts for ``target``.
+    """Upload already-built artifacts for ``target`` using its language.
 
     Args:
         target: Resolved project root and language.
         artifacts: Built files to pass to the publisher CLI.
-        dry_run: When ``True``, uploads are skipped by the publisher
-            implementations.
+        dry_run: When ``True``, uploads are skipped.
         package_manager: Package manager string for JavaScript projects.
-
-    Returns:
-        Result of the publish step for this batch of artifacts.
     """
     from distlift.publish.javascript import publish_javascript_distributions
     from distlift.publish.python import publish_python_distributions
 
     request = PublishRequest(artifacts=artifacts, dry_run=dry_run)
 
-    # Route the publish request to the Python publisher implementation
     if target.language == Language.PYTHON:
         return publish_python_distributions(request)
 
-    # Route the publish request to the JavaScript publisher implementation
     if target.language == Language.JAVASCRIPT:
         return publish_javascript_distributions(
             request, package_manager=package_manager
@@ -125,7 +201,7 @@ def _publish_built_artifacts(
     from distlift.errors import UnsupportedLanguageError
 
     raise UnsupportedLanguageError(
-        f"Cannot publish: unsupported language {target.language.value}"
+        f"Cannot publish: unsupported language {target.language!r}"
     )
 
 
@@ -457,7 +533,50 @@ class DistliftApplication:
         """
         projects_out: list[tuple[str, PublishResult]] = []
 
-        if config.mode == ReleaseMode.MONOREPO:
+        # Explicit target routing takes priority over language dispatch
+        build_targets = config.build.targets if build else []
+        publish_targets = config.publish.targets if publish else []
+
+        if build_targets or publish_targets:
+            all_target_names = {t.name for t in build_targets} | {
+                t.name for t in publish_targets
+            }
+            for name in sorted(all_target_names):
+                bt = next((t for t in build_targets if t.name == name), None)
+                pt = next((t for t in publish_targets if t.name == name), None)
+                target_path = repo_root / (
+                    bt.path if bt else pt.path  # type: ignore[union-attr]
+                )
+                ecosystem = (bt or pt).ecosystem  # type: ignore[union-attr]
+
+                try:
+                    arts = _collect_artifacts_for_ecosystem(
+                        target_path.resolve(),
+                        ecosystem,
+                        command=bt.command if bt else None,
+                        artifacts_globs=bt.artifacts if bt else None,
+                    )
+                except Exception as exc:
+                    projects_out.append(
+                        (name, PublishResult(success=False, error=str(exc)))
+                    )
+                    continue
+
+                if not publish or pt is None:
+                    projects_out.append(
+                        (name, PublishResult(success=True, artifacts=arts))
+                    )
+                    continue
+
+                pr = _publish_artifacts_for_ecosystem(
+                    target_path.resolve(),
+                    ecosystem,
+                    arts,
+                    dry_run,
+                )
+                projects_out.append((name, pr))
+
+        elif config.mode == ReleaseMode.MONOREPO:
             # One cycle per declared (or caller-selected) monorepo package
             pkg_rows = (
                 monorepo_packages
@@ -472,7 +591,9 @@ class DistliftApplication:
                     if pkg.language is not None
                     else config
                 )
-                target = prepare_simple_target(pkg_root, pkg_config, registry)
+                target, _ = prepare_simple_target(
+                    pkg_root, pkg_config, registry
+                )
 
                 pr = self._build_publish_package_with_hooks(
                     config,
@@ -487,7 +608,7 @@ class DistliftApplication:
                 projects_out.append((pkg.name, pr))
 
         else:
-            target = prepare_simple_target(repo_root, config, registry)
+            target, _ = prepare_simple_target(repo_root, config, registry)
             label = target.package_name or repo_root.name
 
             pr = self._build_publish_package_with_hooks(
@@ -733,7 +854,7 @@ class DistliftApplication:
                         if pkg.language is not None
                         else config
                     )
-                    target = prepare_simple_target(
+                    target, _ = prepare_simple_target(
                         pkg_root, pkg_config, registry
                     )
                     pr = self._build_publish_package_with_hooks(
@@ -749,7 +870,7 @@ class DistliftApplication:
                     projects_out.append((pkg.name, pr))
 
             else:
-                target = prepare_simple_target(repo_root, config, registry)
+                target, _ = prepare_simple_target(repo_root, config, registry)
                 label = target.package_name or repo_root.resolve().name
                 pr = self._build_publish_package_with_hooks(
                     config,

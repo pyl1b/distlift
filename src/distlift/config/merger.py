@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 import attrs
 
 from distlift.config.models import (
+    BuildConfig,
     ChangelogConfig,
     DependencyUpdatesConfig,
     DeployConfig,
@@ -14,9 +15,11 @@ from distlift.config.models import (
     ManagedPackageConfig,
     MonorepoConfig,
     PluginConfig,
+    PublishConfig,
     RawConfig,
     ReleaseMode,
     ResolvedConfig,
+    VersionFileConfig,
     VersionFormat,
     VersionSource,
 )
@@ -405,6 +408,23 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
 
     dependency_updates_config = merge_dependency_updates_layers(layers)
 
+    # version_files: replacement-style — last non-empty layer wins
+    version_files: list[VersionFileConfig] = []
+    for layer in layers:
+        if layer.version_files:
+            version_files = list(layer.version_files)
+
+    # build/publish targets: last non-empty layer wins
+    build_config = BuildConfig()
+    for layer in layers:
+        if layer.build.targets:
+            build_config = layer.build
+
+    publish_config = PublishConfig()
+    for layer in layers:
+        if layer.publish.targets:
+            publish_config = layer.publish
+
     return ResolvedConfig(
         language=language,
         mode=mode or ReleaseMode.SIMPLE,
@@ -414,6 +434,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         tag_template=tag_template,
         version_source=version_source,
         manifest_path=Path(manifest_path_str) if manifest_path_str else None,
+        version_files=version_files,
         editor=merge_optional_scalar(
             layers,
             lambda layer: layer.editor,
@@ -427,5 +448,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         deploy=deploy_config,
         dependency_updates=dependency_updates_config,
         hooks=hooks_config,
+        build=build_config,
+        publish=publish_config,
         field_sources=field_sources,
     )

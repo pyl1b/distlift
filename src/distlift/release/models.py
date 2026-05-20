@@ -17,23 +17,47 @@ from distlift.versioning.models import ResolvedVersion
 
 
 @attrs.define
+class ResolvedVersionFile:
+    """One manifest file resolved to an absolute path with a known handler.
+
+    Attributes:
+        path: Absolute path to the manifest file.
+        kind: Manifest handler kind string (e.g. ``"pyproject"``).
+        primary: When True this file supplies the current manifest version.
+        update: When False this file is read but not written.
+    """
+
+    path: Path
+    kind: str
+    primary: bool = False
+    update: bool = True
+
+
+@attrs.define
 class ReleaseTarget:
     """Describes one package root and manifest for a release run.
 
     Attributes:
         language: Project language used to pick the manifest adapter.
+            May be ``None`` when ``version_files`` are configured explicitly.
         root: Absolute or repo-relative root directory for this package.
         manifest_path: Path to the version manifest file to read or update.
+            Still used by the legacy adapter path; ``None`` when version files
+            are provided instead.
         version_source: Whether the canonical version lives in the manifest
             or only in Git tags.
         package_name: Optional monorepo package name used in tags and logs.
+        version_files: Resolved version files for this release unit.  When
+            non-empty these replace the legacy ``language``/``manifest_path``
+            manifest update path.
     """
 
-    language: Language
+    language: Language | None
     root: Path
-    manifest_path: Path
+    manifest_path: Path | None
     version_source: VersionSource = VersionSource.MANIFEST
     package_name: str | None = None
+    version_files: list[ResolvedVersionFile] = attrs.Factory(list)
 
 
 @attrs.define
@@ -102,14 +126,20 @@ class PackageReleasePlan:
         target: Language, paths, and naming for this package.
         resolved_version: Current and next versions plus computed tag name.
         update_manifest: When False, manifests are left unchanged (e.g.
-            dynamic or tag-only versioning).
+            dynamic or tag-only versioning).  Still consulted by the legacy
+            single-manifest path when ``version_files_to_update`` is empty.
         changelog_update: Optional changelog mutation applied before manifests.
+        version_files_to_update: Resolved version files that should be written
+            to the next version.  When non-empty the executor uses this list
+            instead of the legacy ``target.language``/``target.manifest_path``
+            path.
     """
 
     target: ReleaseTarget
     resolved_version: ResolvedVersion
     update_manifest: bool
     changelog_update: ChangelogUpdatePlan | None = None
+    version_files_to_update: list[ResolvedVersionFile] = attrs.Factory(list)
 
 
 @attrs.define
