@@ -10,7 +10,16 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.6] - 2026-05-20
+
+### Changed
+
+- Update dependent's version
+- Support mixed language repos
 
 ## [0.1.5] - 2026-05-14
 
@@ -72,4 +81,5 @@
 [0.1.3]: https://github.com/pyl1b/distlift/compare/v0.1.2...v0.1.3
 [0.1.4]: https://github.com/pyl1b/distlift/compare/v0.1.3...v0.1.4
 [0.1.5]: https://github.com/pyl1b/distlift/compare/v0.1.4...v0.1.5
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.5...HEAD
+[0.1.6]: https://github.com/pyl1b/distlift/compare/v0.1.5...v0.1.6
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.6...HEAD
