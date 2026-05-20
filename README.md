@@ -153,6 +153,74 @@ shown.
 
 Add `--dry-run` to preview what would happen without writing to Git.
 
+### Dependent package updates
+
+When you release package `a`, distlift can update dependency declarations on
+other packages in the same monorepo (for example `b` and `c` that depend on
+`a`) **before** the release commit. If `b` is part of the same release, its
+tagged manifest will contain both `b`'s new version and the new constraint on
+`a`.
+
+Enable built-in scanning in `distlift.toml`:
+
+```toml
+[dependency_updates]
+enabled = true
+include_current_monorepo = true
+python_version_template = ">={version}"
+javascript_version_template = "^{version}"
+
+[[dependency_updates.rules]]
+package = "a"
+projects = ["b", "c"]
+version_template = "=={version}"
+```
+
+Per-package switches (monorepo only; ignored in simple mode):
+
+```toml
+[[monorepo.packages]]
+name = "a"
+path = "packages/a"
+dependency_updates_trigger_enabled = true
+dependency_updates_receive_enabled = true
+```
+
+**Outside a release**, apply the same logic manually:
+
+```text
+distlift dependencies autoupdate --released a=1.2.0
+```
+
+Use `--dry-run` to preview changes. When updates run, the
+`dependencies_autoupdated` hook fires (configure under `[hooks]`). Hook
+subprocesses also receive:
+
+- `DISTLIFT_DEPENDENCY_UPDATE_COUNT` — number of declarations changed
+- `DISTLIFT_DEPENDENCY_UPDATE_PROJECTS` — dependent project names (sorted)
+- `DISTLIFT_DEPENDENCY_UPDATE_FILES` — manifest paths updated (sorted)
+- `DISTLIFT_DEPENDENCY_UPDATE_DEPENDENCIES` — dependency names changed
+  (sorted)
+- `DISTLIFT_DEPENDENCY_UPDATE_TRIGGERS` — released packages that triggered
+  updates (sorted)
+
+**Custom rules in a plugin:** scaffold a small pip-installable project:
+
+```text
+distlift plugins create-dependency-updater my-updater \
+  --output plugins/my-updater \
+  --watch-package a \
+  --project b
+```
+
+Install with `python -m pip install -e plugins/my-updater`, or load from a
+directory without installing:
+
+```toml
+[plugins]
+directories = ["plugins/my-updater"]
+```
+
 ## Deploy marker tags (CI)
 
 When one Git tag should trigger deployment for the whole repo (for example

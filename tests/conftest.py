@@ -107,3 +107,63 @@ def tmp_js_project(tmp_git_repo: Path) -> Path:
         capture_output=True,
     )
     return tmp_git_repo
+
+
+@pytest.fixture
+def monorepo_abc_git_repo(tmp_git_repo: Path) -> Path:
+    """Git repo with packages a, b, c where b and c depend on pkg-a.
+
+    Args:
+        tmp_git_repo: Initialized temporary Git repository.
+    """
+    (tmp_git_repo / "packages" / "a").mkdir(parents=True)
+    (tmp_git_repo / "packages" / "b").mkdir(parents=True)
+    (tmp_git_repo / "packages" / "c").mkdir(parents=True)
+
+    (tmp_git_repo / "packages" / "a" / "pyproject.toml").write_text(
+        '[project]\nname = "pkg-a"\nversion = "1.0.0"\n'
+    )
+    (tmp_git_repo / "packages" / "b" / "pyproject.toml").write_text(
+        '[project]\nname = "pkg-b"\nversion = "0.1.0"\n'
+        'dependencies = ["pkg-a>=1.0.0"]\n'
+    )
+    (tmp_git_repo / "packages" / "c" / "pyproject.toml").write_text(
+        '[project]\nname = "pkg-c"\nversion = "0.1.0"\n'
+        'dependencies = ["pkg-a>=1.0.0"]\n'
+    )
+    (tmp_git_repo / "distlift.toml").write_text(
+        """
+[release]
+mode = "monorepo"
+language = "python"
+
+[dependency_updates]
+enabled = true
+
+[[monorepo.packages]]
+name = "a"
+path = "packages/a"
+
+[[monorepo.packages]]
+name = "b"
+path = "packages/b"
+
+[[monorepo.packages]]
+name = "c"
+path = "packages/c"
+"""
+    )
+    subprocess.run(
+        ["git", "add", "."],
+        cwd=tmp_git_repo,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "Add monorepo packages"],
+        cwd=tmp_git_repo,
+        check=True,
+        capture_output=True,
+    )
+
+    return tmp_git_repo

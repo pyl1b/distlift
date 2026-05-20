@@ -151,6 +151,61 @@ class VersionSource(StrEnum):
 
 
 @attrs.define
+class DependencyUpdateRule:
+    """Declarative rule for dependency updates triggered by one release.
+
+    Attributes:
+        package: Released package name that triggers this rule.
+        dependency_name: Dependency name to search for; defaults to package.
+        projects: Dependent project names to update, or ``["*"]`` for all.
+        version_template: Version specifier template such as ``=={version}``.
+    """
+
+    package: str
+    dependency_name: str | None = None
+    projects: list[str] = attrs.Factory(lambda: ["*"])
+    version_template: str | None = None
+
+
+@attrs.define
+class ExternalMonorepoDependencyUpdateConfig:
+    """A monorepo outside the release repo that may need dependency updates.
+
+    Attributes:
+        path: Filesystem path to the external monorepo root.
+        config_paths: Optional extra distlift config files for that repo.
+        projects: Project names to inspect, or ``["*"]`` for all.
+    """
+
+    path: str
+    config_paths: list[str] = attrs.Factory(list)
+    projects: list[str] = attrs.Factory(lambda: ["*"])
+
+
+@attrs.define
+class DependencyUpdatesConfig:
+    """Settings for automatic dependent package version updates.
+
+    Attributes:
+        enabled: Whether built-in dependency updates run for this repo.
+        include_current_monorepo: Scan configured packages in this repo.
+        rules: Explicit package-to-dependent-project update rules.
+        external_monorepos: Other distlift monorepos to inspect.
+        python_version_template: Default Python specifier template.
+        javascript_version_template: Default JavaScript specifier template.
+    """
+
+    enabled: bool = False
+    include_current_monorepo: bool = True
+    rules: list[DependencyUpdateRule] = attrs.Factory(list)
+    external_monorepos: list[ExternalMonorepoDependencyUpdateConfig] = (
+        attrs.Factory(list)
+    )
+    python_version_template: str = ">={version}"
+    javascript_version_template: str = "^{version}"
+
+
+@attrs.define
 class ManagedPackageConfig:
     """One monorepo package entry loaded from configuration.
 
@@ -164,6 +219,10 @@ class ManagedPackageConfig:
         tag_template: Optional per-package tag naming template override.
         version_source: Whether to read the version from manifest or tags.
         changelog_path: Optional override path for this package's CHANGELOG.md.
+        dependency_updates_trigger_enabled: When False, releasing this package
+            does not trigger dependency autoupdates in dependents.
+        dependency_updates_receive_enabled: When False, this package's manifest
+            is not updated when another released package is a dependency.
     """
 
     name: str
@@ -175,6 +234,8 @@ class ManagedPackageConfig:
     tag_template: str | None = None
     version_source: VersionSource = VersionSource.MANIFEST
     changelog_path: str | None = None
+    dependency_updates_trigger_enabled: bool = True
+    dependency_updates_receive_enabled: bool = True
 
 
 @attrs.define
@@ -221,6 +282,8 @@ class HooksConfig:
         build_failed: After a failed local build for one package.
         publish_succeeded: After a successful registry upload for one package.
         publish_failed: After a failed registry upload for one package.
+        dependencies_autoupdated: After dependency declarations are written and
+            before the release commit is created.
     """
 
     tag_pushed: list[HookSpec] = attrs.Factory(list)
@@ -230,6 +293,7 @@ class HooksConfig:
     build_failed: list[HookSpec] = attrs.Factory(list)
     publish_succeeded: list[HookSpec] = attrs.Factory(list)
     publish_failed: list[HookSpec] = attrs.Factory(list)
+    dependencies_autoupdated: list[HookSpec] = attrs.Factory(list)
 
 
 def _empty_hooks_config() -> HooksConfig:
@@ -281,6 +345,7 @@ class RawConfig:
             from this layer; merged field-by-field across layers.
         deploy_overlay: Shallow overlay dict for ``[deploy]`` keys from this
             layer; merged field-by-field across layers.
+        dependency_updates: Dependency autoupdate settings from this layer.
         hooks: Hook commands from this layer's ``[hooks]`` table.
         hooks_append: Extra hook specs parsed from ``DISTLIFT_HOOKS_*``; only
             the environment layer supplies these; appended after TOML merge.
@@ -300,6 +365,9 @@ class RawConfig:
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog_overlay: dict[str, Any] = attrs.Factory(dict)
     deploy_overlay: dict[str, Any] = attrs.Factory(dict)
+    dependency_updates: DependencyUpdatesConfig = attrs.Factory(
+        DependencyUpdatesConfig
+    )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     hooks_append: HooksConfig = attrs.Factory(_empty_hooks_config)
     source: str = "<unknown>"
@@ -326,6 +394,7 @@ class ResolvedConfig:
         monorepo: Effective monorepo enable flag and merged package list.
         changelog: Effective Keep a Changelog generation settings.
         deploy: Effective ``distlift deploy`` settings.
+        dependency_updates: Effective dependency autoupdate settings.
         hooks: Effective lifecycle hook command lists.
         field_sources: Map of top-level scalar field names to the source
             label of the layer that last set each field.
@@ -344,5 +413,8 @@ class ResolvedConfig:
     monorepo: MonorepoConfig = attrs.Factory(MonorepoConfig)
     changelog: ChangelogConfig = attrs.Factory(ChangelogConfig)
     deploy: DeployConfig = attrs.Factory(DeployConfig)
+    dependency_updates: DependencyUpdatesConfig = attrs.Factory(
+        DependencyUpdatesConfig
+    )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     field_sources: dict[str, str] = attrs.Factory(dict)

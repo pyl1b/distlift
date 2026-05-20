@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from distlift.dependencies.models import (
+        DependencyUpdateRequest,
+        DependencyUpdateResult,
+    )
     from distlift.plugins.registry import PluginRegistry
 
 
@@ -85,6 +89,24 @@ class GitBackendPlugin(DistliftPlugin):
     Attributes:
         (none; a single Git backend replaces subprocess usage when registered.)
     """
+
+
+class DependencyUpdaterPlugin(DistliftPlugin):
+    """Plugin that updates dependent project manifests during releases.
+
+    Attributes:
+        (none; concrete plugins implement the update method.)
+    """
+
+    @abstractmethod
+    def get_updater_name(self) -> str:
+        """Return the unique dependency updater name."""
+
+    @abstractmethod
+    def update_dependencies(
+        self, request: DependencyUpdateRequest
+    ) -> DependencyUpdateResult:
+        """Update or preview dependent package dependency declarations."""
 
 
 class ChangelogPlugin(DistliftPlugin):

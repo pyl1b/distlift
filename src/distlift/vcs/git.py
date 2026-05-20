@@ -124,6 +124,12 @@ class GitRepository:
 
         return [self.root / f for f in result.stdout.splitlines() if f]
 
+    def has_changes_to_commit(self) -> bool:
+        """Return True when tracked or untracked files would be committed."""
+        result = self._run(["status", "--porcelain"])
+
+        return bool(result.stdout.strip())
+
     def commit_all(self, message: str) -> str:
         """Stage all changes, commit with ``message``, return the new hash.
 

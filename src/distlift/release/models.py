@@ -12,6 +12,7 @@ from distlift.config.models import (
     ResolvedConfig,
     VersionSource,
 )
+from distlift.dependencies.models import DependencyUpdateResult
 from distlift.versioning.models import ResolvedVersion
 
 
@@ -168,6 +169,7 @@ class ReleaseResult:
         commit_sha: Hash of the release commit when one was made.
         pushed_remotes: Remotes that received branch and tag pushes.
         error: Human-readable failure message when success is False.
+        dependency_updates: Dependency autoupdate results from this run.
     """
 
     success: bool
@@ -176,3 +178,4 @@ class ReleaseResult:
     commit_sha: str | None = None
     pushed_remotes: list[str] = attrs.Factory(list)
     error: str | None = None
+    dependency_updates: list[DependencyUpdateResult] = attrs.Factory(list)

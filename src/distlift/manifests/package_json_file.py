@@ -24,6 +24,22 @@ def read_package_json(path: Path) -> dict[str, Any]:
         raise ManifestUpdateError(f"Cannot read {path}: {exc}") from exc
 
 
+def get_package_name(data: dict[str, Any]) -> str | None:
+    """Return the ``name`` field from parsed package data, if present.
+
+    Args:
+        data: Parsed ``package.json`` object (mapping).
+    """
+    raw = data.get("name")
+
+    if raw is None:
+        return None
+
+    name = str(raw).strip()
+
+    return name or None
+
+
 def get_package_version(data: dict[str, Any]) -> str | None:
     """Return the ``version`` field from parsed package data, if present.
 

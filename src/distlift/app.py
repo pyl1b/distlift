@@ -15,10 +15,21 @@ from distlift.config.models import (
     ReleaseMode,
     ResolvedConfig,
 )
+from distlift.dependencies.models import (
+    DependencyUpdateRequest,
+    DependencyUpdateResult,
+    ReleasedProjectVersion,
+)
+from distlift.dependencies.service import run_dependency_updates
 from distlift.deploy.models import DeployRequest, DeployResult
 from distlift.deploy.service import run_deploy as run_deploy_service
 from distlift.errors import ConfigurationError, HookExecutionError
-from distlift.hooks import run_config_hooks
+from distlift.hooks import (
+    build_hook_env,
+    run_config_hooks,
+    run_hook_specs,
+    specs_for_event,
+)
 from distlift.monorepo.discovery import load_managed_packages
 from distlift.plugins.manager import PluginLoadRequest, PluginManager
 from distlift.plugins.registry import PluginRegistry
@@ -600,6 +611,75 @@ class DistliftApplication:
             return ReleaseResult(
                 success=False, dry_run=request.dry_run, error=str(exc)
             )
+
+    def run_dependency_autoupdate(
+        self,
+        repo_root: Path,
+        config: ResolvedConfig,
+        released: list[ReleasedProjectVersion],
+        *,
+        dry_run: bool,
+        registry: PluginRegistry | None = None,
+    ) -> list[DependencyUpdateResult]:
+        """Run dependency autoupdate without release planning or Git tagging.
+
+        Args:
+            repo_root: Repository root for config and project discovery.
+            config: Effective merged configuration.
+            released: Released package identities and versions to apply.
+            dry_run: When True, report changes without writing files.
+            registry: Optional plugin registry; built from config when omitted.
+
+        Returns:
+            Dependency update results from built-in and plugin updaters.
+        """
+        if registry is None:
+            registry = self._default_registry(config)
+
+        request = DependencyUpdateRequest(
+            repo_root=repo_root.resolve(),
+            config=config,
+            plan=None,
+            released_versions=released,
+            dry_run=dry_run,
+            run_source="command",
+        )
+        results = run_dependency_updates(request, registry)
+
+        if dry_run:
+            return results
+
+        all_changes = [c for r in results for c in r.changes]
+
+        if not all_changes:
+            return results
+
+        specs = specs_for_event(config.hooks, "dependencies_autoupdated")
+
+        if specs:
+            projects = sorted({c.project_name for c in all_changes})
+            files = sorted({str(c.manifest_path) for c in all_changes})
+            dependencies = sorted({c.dependency_name for c in all_changes})
+            triggers = sorted(
+                {rv.package_name or rv.dependency_name for rv in released}
+            )
+            extra = build_hook_env(
+                event="dependencies_autoupdated",
+                repo_root=repo_root.resolve(),
+                dry_run=False,
+                dependency_update_count=len(all_changes),
+                dependency_update_projects=projects,
+                dependency_update_files=files,
+                dependency_update_dependencies=dependencies,
+                dependency_update_triggers=triggers,
+            )
+            run_hook_specs(
+                specs,
+                repo_root=repo_root.resolve(),
+                extra_env=extra,
+            )
+
+        return results
 
     def run_deploy(self, request: DeployRequest) -> DeployResult:
         """Create and push a numbered deploy marker tag at ``HEAD``.

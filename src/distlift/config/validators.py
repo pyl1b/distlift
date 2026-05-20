@@ -24,6 +24,7 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
     validate_tag_template(config)
     validate_changelog_config(config)
     validate_deploy_config(config)
+    validate_dependency_updates_config(config)
     validate_hooks_config(config)
 
     if config.mode == ReleaseMode.MONOREPO:
@@ -86,6 +87,7 @@ def validate_hooks_config(config: ResolvedConfig) -> None:
         "build_failed",
         "publish_succeeded",
         "publish_failed",
+        "dependencies_autoupdated",
     ):
         specs = getattr(h, field_name)
 
@@ -126,6 +128,45 @@ def validate_changelog_config(config: ResolvedConfig) -> None:
             raise ConfigurationError(
                 "changelog.commit_mapping values must be Keep a Changelog "
                 f"section titles (got {section!r} for type {ctype!r})"
+            )
+
+
+def validate_dependency_updates_config(config: ResolvedConfig) -> None:
+    """Validate dependency autoupdate settings on the resolved configuration.
+
+    Args:
+        config: Fully merged configuration including ``dependency_updates``.
+    """
+    du = config.dependency_updates
+
+    if "{version}" not in du.python_version_template:
+        raise ConfigurationError(
+            "dependency_updates.python_version_template must contain {version}"
+        )
+
+    if "{version}" not in du.javascript_version_template:
+        raise ConfigurationError(
+            "dependency_updates.javascript_version_template must contain "
+            "{version}"
+        )
+
+    for i, rule in enumerate(du.rules):
+        if not rule.package.strip():
+            raise ConfigurationError(
+                f"dependency_updates.rules[{i}].package cannot be empty"
+            )
+
+        if not rule.projects or not any(p.strip() for p in rule.projects):
+            raise ConfigurationError(
+                f"dependency_updates.rules[{i}].projects must list at least "
+                "one non-empty project name"
+            )
+
+    for i, ext in enumerate(du.external_monorepos):
+        if not ext.path.strip():
+            raise ConfigurationError(
+                f"dependency_updates.external_monorepos[{i}].path cannot be "
+                "empty"
             )
 
 

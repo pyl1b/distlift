@@ -15,6 +15,7 @@ HOOK_ENV_KEY_SUFFIXES: dict[str, str] = {
     "build_failed": "BUILD_FAILED",
     "publish_succeeded": "PUBLISH_SUCCEEDED",
     "publish_failed": "PUBLISH_FAILED",
+    "dependencies_autoupdated": "DEPENDENCIES_AUTOUPDATED",
 }
 
 DEFAULT_REMOTE = "origin"

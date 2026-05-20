@@ -32,6 +32,16 @@ src/distlift/
     loader.py          import plugin modules and instantiate plugin objects
     manager.py         PluginManager — coordinates discovery → loading → registry creation
     builtins.py        build_builtin_plugins() — wires built-in implementations
+    scaffold.py        create_dependency_updater_plugin() plugin project template
+
+  dependencies/
+    models.py          ReleasedProjectVersion, DependencyUpdateRequest/Result
+    projects.py        project lists, PEP 503 name normalization, enablement filters
+    python.py          pyproject.toml dependency find/update (packaging + tomlkit)
+    javascript.py      package.json dependency find/update
+    service.py         run_builtin_dependency_updates(), rule and scan orchestration
+    configured_plugin.py ConfiguredDependencyUpdaterPlugin (TOML rules)
+    format.py          CLI autoupdate summary lines
 
   changelog/
     builder.py         assemble changelog update plans from Git history and settings
@@ -80,7 +90,7 @@ src/distlift/
     simple.py          compute_simple_release_plan()
     monorepo.py        compute_monorepo_release_plan()
     changelog_extra.py finalize_plan_with_changelog() attaches per-package changelog plans
-    executor.py        ReleaseExecutor — writes changelogs/manifests, commits, tags, pushes
+    executor.py        ReleaseExecutor — changelogs, manifests, dependency updates, commit, tags
 
   monorepo/
     discovery.py       load_managed_packages(), resolve_package_manifest_path()
@@ -91,7 +101,8 @@ src/distlift/
     python.py          build_python_distributions(), publish_python_distributions()
     javascript.py      build_javascript_distributions(), publish_javascript_distributions()
 
-tests/                 mirrors src/ structure; includes ``tests/changelog/``
+tests/                 mirrors src/ structure; includes ``tests/changelog/``,
+                       ``tests/dependencies/``
 ```
 
 ---
@@ -151,6 +162,12 @@ If `stdin` is not a TTY (typical CI), the generated changelog entry is kept
 without prompting. Disable per run with `--no-changelog-editor` /
 `--no-editor`, or set `changelog.prompt_editor = false` /
 `DISTLIFT_CHANGELOG_PROMPT_EDITOR=false`.
+
+Key dependency-update environment variables:
+`DISTLIFT_DEPENDENCY_UPDATES_ENABLED`,
+`DISTLIFT_DEPENDENCY_UPDATES_INCLUDE_CURRENT_MONOREPO`.
+Hook event `dependencies_autoupdated` exposes `DISTLIFT_DEPENDENCY_UPDATE_*`
+summary variables after dependency files are written.
 
 ---
 

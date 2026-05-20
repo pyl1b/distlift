@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from distlift.config.models import (
+    DependencyUpdateRule,
+    DependencyUpdatesConfig,
+    ExternalMonorepoDependencyUpdateConfig,
     HooksConfig,
     HookSpec,
     Language,
@@ -61,6 +64,143 @@ def _deploy_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
     }
 
 
+def _dependency_update_rule_from_mapping(item: Any) -> DependencyUpdateRule:
+    """Parse one ``[[dependency_updates.rules]]`` table entry.
+
+    Args:
+        item: Mapping with rule fields from TOML.
+    """
+    if not isinstance(item, Mapping):
+        raise ConfigurationError(
+            "Each dependency_updates.rules entry must be a table"
+        )
+
+    package_raw = item.get("package")
+
+    if not isinstance(package_raw, str) or not package_raw.strip():
+        raise ConfigurationError(
+            "dependency_updates.rules entry requires non-empty 'package'"
+        )
+
+    dep_name = item.get("dependency_name")
+    projects_raw = item.get("projects", ["*"])
+    projects: list[str] = []
+
+    if isinstance(projects_raw, list):
+        projects = [str(p).strip() for p in projects_raw if str(p).strip()]
+
+    if not projects:
+        projects = ["*"]
+
+    version_template = item.get("version_template")
+
+    return DependencyUpdateRule(
+        package=package_raw.strip(),
+        dependency_name=(
+            str(dep_name).strip() if isinstance(dep_name, str) else None
+        ),
+        projects=projects,
+        version_template=(
+            str(version_template).strip()
+            if isinstance(version_template, str)
+            else None
+        ),
+    )
+
+
+def _external_monorepo_from_mapping(
+    item: Any,
+) -> ExternalMonorepoDependencyUpdateConfig:
+    """Parse one ``[[dependency_updates.external_monorepos]]`` table entry.
+
+    Args:
+        item: Mapping with external monorepo fields from TOML.
+    """
+    if not isinstance(item, Mapping):
+        raise ConfigurationError(
+            "Each dependency_updates.external_monorepos entry must be a table"
+        )
+
+    path_raw = item.get("path")
+
+    if not isinstance(path_raw, str) or not path_raw.strip():
+        raise ConfigurationError(
+            "dependency_updates.external_monorepos entry requires "
+            "non-empty 'path'"
+        )
+
+    config_paths_raw = item.get("config_paths", [])
+    config_paths: list[str] = []
+
+    if isinstance(config_paths_raw, list):
+        config_paths = [
+            str(p).strip() for p in config_paths_raw if str(p).strip()
+        ]
+
+    projects_raw = item.get("projects", ["*"])
+    projects: list[str] = []
+
+    if isinstance(projects_raw, list):
+        projects = [str(p).strip() for p in projects_raw if str(p).strip()]
+
+    if not projects:
+        projects = ["*"]
+
+    return ExternalMonorepoDependencyUpdateConfig(
+        path=path_raw.strip(),
+        config_paths=config_paths,
+        projects=projects,
+    )
+
+
+def dependency_updates_from_mapping(mapping: Any) -> DependencyUpdatesConfig:
+    """Build ``DependencyUpdatesConfig`` from a parsed ``[dependency_updates]`` table.
+
+    Args:
+        mapping: Parsed mapping for the dependency_updates section.
+    """
+    if not isinstance(mapping, dict):
+        return DependencyUpdatesConfig()
+
+    rules: list[DependencyUpdateRule] = []
+    rules_raw = mapping.get("rules", [])
+
+    if isinstance(rules_raw, list):
+        for item in rules_raw:
+            rules.append(_dependency_update_rule_from_mapping(item))
+
+    external: list[ExternalMonorepoDependencyUpdateConfig] = []
+    ext_raw = mapping.get("external_monorepos", [])
+
+    if isinstance(ext_raw, list):
+        for item in ext_raw:
+            external.append(_external_monorepo_from_mapping(item))
+
+    kw: dict[str, Any] = {}
+
+    if "enabled" in mapping:
+        kw["enabled"] = bool(mapping["enabled"])
+
+    if "include_current_monorepo" in mapping:
+        kw["include_current_monorepo"] = bool(
+            mapping["include_current_monorepo"]
+        )
+
+    if "python_version_template" in mapping:
+        kw["python_version_template"] = str(mapping["python_version_template"])
+
+    if "javascript_version_template" in mapping:
+        kw["javascript_version_template"] = str(
+            mapping["javascript_version_template"]
+        )
+
+    return DependencyUpdatesConfig(
+        rules=rules,
+        external_monorepos=external,
+        **kw,
+    )
+
+
 def _changelog_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
     """Return only recognized changelog keys from a parsed mapping.
 
@@ -86,6 +226,7 @@ _HOOK_LIST_FIELDS = frozenset(
         "build_failed",
         "publish_succeeded",
         "publish_failed",
+        "dependencies_autoupdated",
     }
 )
 
@@ -318,6 +459,21 @@ def load_environment_config(
     if deploy_env:
         result["deploy"] = deploy_env
 
+    dep_env: dict[str, Any] = {}
+
+    if v := _get("DEPENDENCY_UPDATES_ENABLED"):
+        dep_env["enabled"] = v.lower() in ("1", "true", "yes")
+
+    if v := _get("DEPENDENCY_UPDATES_INCLUDE_CURRENT_MONOREPO"):
+        dep_env["include_current_monorepo"] = v.lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+    if dep_env:
+        result["dependency_updates"] = dep_env
+
     hooks_append_kw: dict[str, list[HookSpec]] = {}
 
     for event_key, suffix in HOOK_ENV_KEY_SUFFIXES.items():
@@ -394,6 +550,23 @@ def _managed_package_from_monorepo_item(
             )
 
         pkg = item
+        trigger_enabled = pkg.get("dependency_updates_trigger_enabled", True)
+        receive_enabled = pkg.get("dependency_updates_receive_enabled", True)
+
+        if not isinstance(trigger_enabled, bool):
+            raise ConfigurationError(
+                f"Package {name_raw.strip()!r}: "
+                "dependency_updates_trigger_enabled must be a boolean "
+                f"({source})"
+            )
+
+        if not isinstance(receive_enabled, bool):
+            raise ConfigurationError(
+                f"Package {name_raw.strip()!r}: "
+                "dependency_updates_receive_enabled must be a boolean "
+                f"({source})"
+            )
+
         return ManagedPackageConfig(
             name=name_raw.strip(),
             path=path_raw.strip(),
@@ -408,6 +581,8 @@ def _managed_package_from_monorepo_item(
                 pkg.get("version_source", "manifest")
             ),
             changelog_path=pkg.get("changelog_path"),
+            dependency_updates_trigger_enabled=trigger_enabled,
+            dependency_updates_receive_enabled=receive_enabled,
         )
 
     raise ConfigurationError(
@@ -485,6 +660,10 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
 
     deploy_overlay = _deploy_overlay_from_mapping(data.get("deploy"))
 
+    dependency_updates = dependency_updates_from_mapping(
+        data.get("dependency_updates")
+    )
+
     hooks = hooks_config_from_mapping(data.get("hooks", {}))
 
     hooks_append_raw = data.get("hooks_append")
@@ -507,6 +686,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         monorepo=monorepo_config,
         changelog_overlay=changelog_overlay,
         deploy_overlay=deploy_overlay,
+        dependency_updates=dependency_updates,
         hooks=hooks,
         hooks_append=hooks_append,
         source=source,

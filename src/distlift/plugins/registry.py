@@ -5,6 +5,7 @@ import attrs
 from distlift.errors import PluginError, UnsupportedLanguageError
 from distlift.plugins.base import (
     ChangelogPlugin,
+    DependencyUpdaterPlugin,
     GitBackendPlugin,
     LanguagePlugin,
     ManifestPlugin,
@@ -46,6 +47,7 @@ class PluginRegistry:
         _version_source_plugins: Map of version source name to plugin.
         _git_backend: Optional registered Git backend plugin.
         _changelog_plugin: Optional registered changelog formatter plugin.
+        _dependency_update_plugins: Map of updater name to registered plugin.
     """
 
     allow_override: bool = True
@@ -64,6 +66,9 @@ class PluginRegistry:
     )
     _git_backend: RegisteredPlugin | None = None
     _changelog_plugin: RegisteredPlugin | None = None
+    _dependency_update_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
 
     def register_language_plugin(
         self, plugin: LanguagePlugin, source: str = "<unknown>"
@@ -183,6 +188,30 @@ class PluginRegistry:
             overrides=self._git_backend.source if self._git_backend else None,
         )
 
+    def register_dependency_updater_plugin(
+        self, plugin: DependencyUpdaterPlugin, source: str = "<unknown>"
+    ) -> None:
+        """Register or replace the plugin for ``plugin.get_updater_name()``.
+
+        Args:
+            plugin: Dependency updater plugin instance to register.
+            source: Provenance label for diagnostics.
+        """
+        name = plugin.get_updater_name()
+
+        if name in self._dependency_update_plugins and not self.allow_override:
+            raise PluginError(
+                f"Dependency updater plugin {name!r} already registered; "
+                "overrides are disabled"
+            )
+
+        prev = self._dependency_update_plugins.get(name)
+        self._dependency_update_plugins[name] = RegisteredPlugin(
+            plugin=plugin,
+            source=source,
+            overrides=prev.source if prev else None,
+        )
+
     def register_changelog_plugin(
         self, plugin: ChangelogPlugin, source: str = "<unknown>"
     ) -> None:
@@ -258,6 +287,17 @@ class PluginRegistry:
             raise PluginError("No Git backend plugin registered")
         return self._git_backend.plugin  # type: ignore[return-value]
 
+    def get_dependency_updater_plugins(self) -> list[DependencyUpdaterPlugin]:
+        """Return all registered dependency updater plugins.
+
+        Returns:
+            List of dependency updater plugin instances.
+        """
+        return [
+            entry.plugin  # type: ignore[misc]
+            for entry in self._dependency_update_plugins.values()
+        ]
+
     def get_changelog_plugin(self) -> ChangelogPlugin | None:
         """Return the registered changelog plugin when present.
 
@@ -276,6 +316,7 @@ class PluginRegistry:
         result.extend(self._manifest_plugins.values())
         result.extend(self._publish_plugins.values())
         result.extend(self._version_source_plugins.values())
+        result.extend(self._dependency_update_plugins.values())
         if self._git_backend:
             result.append(self._git_backend)
         if self._changelog_plugin:

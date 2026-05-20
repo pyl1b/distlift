@@ -18,13 +18,27 @@ from distlift.config.files import (
     open_config_file_in_editor,
     open_repo_config_file_in_editor,
 )
-from distlift.config.models import BumpKind, ResolvedConfig
+from distlift.config.models import (
+    BumpKind,
+    DependencyUpdateRule,
+    ExternalMonorepoDependencyUpdateConfig,
+    Language,
+    ResolvedConfig,
+)
 from distlift.config.validators import validate_resolved_config
 from distlift.constants import ENV_PREFIX, HOOK_ENV_KEY_SUFFIXES
+from distlift.dependencies.format import format_dependency_update_summary
+from distlift.dependencies.models import ReleasedProjectVersion
+from distlift.dependencies.projects import manifest_dependency_name
 from distlift.deploy.models import DeployRequest
 from distlift.errors import ConfigurationError
 from distlift.logging_utils import configure_logging
+from distlift.monorepo.discovery import resolve_package_manifest_path
 from distlift.plugins.base import DistliftPlugin
+from distlift.plugins.scaffold import (
+    DependencyUpdaterTemplateOptions,
+    create_dependency_updater_plugin,
+)
 from distlift.publish.models import PublishRunResult
 from distlift.release.models import (
     MonorepoReleaseRequest,
@@ -45,11 +59,102 @@ app = typer.Typer(
 release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
 config_app = typer.Typer(help="Configuration commands.", no_args_is_help=True)
 plugins_app = typer.Typer(help="Plugin commands.", no_args_is_help=True)
+dependencies_app = typer.Typer(
+    help="Dependency autoupdate commands.",
+    no_args_is_help=True,
+)
 
 app.add_typer(release_app, name="release")
 app.add_typer(config_app, name="config")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(changelog_app, name="changelog")
+app.add_typer(dependencies_app, name="dependencies")
+
+
+def _echo_dependency_updates(
+    results: list,
+    *,
+    dry_run: bool,
+    prefix: str = "",
+) -> None:
+    """Print dependency autoupdate summary lines when changes exist.
+
+    Args:
+        results: Dependency update results from a release or command run.
+        dry_run: When True, use dry-run wording in the summary.
+        prefix: Optional prefix (for example ``[dry-run] ``).
+    """
+    summary = format_dependency_update_summary(
+        results,
+        dry_run=dry_run,
+        prefix=prefix,
+    )
+
+    if summary:
+        typer.echo(summary)
+    else:
+        typer.echo("No dependencies autoupdated.")
+
+
+def _parse_released_specs(
+    released: list[str],
+    config: ResolvedConfig,
+    repo_root: Path,
+) -> list[ReleasedProjectVersion]:
+    """Parse ``package=version`` CLI values into released version records.
+
+    Args:
+        released: Repeated ``--released`` option values.
+        config: Effective configuration for package lookup.
+        repo_root: Repository root for path resolution.
+    """
+    if not released:
+        raise ConfigurationError(
+            "At least one --released package=version value is required"
+        )
+
+    versions: list[ReleasedProjectVersion] = []
+    packages_by_name = {p.name: p for p in config.monorepo.packages}
+
+    for spec in released:
+        if "=" not in spec:
+            raise ConfigurationError(
+                f"Invalid --released value {spec!r}; use package=version"
+            )
+
+        pkg_name, version = spec.split("=", 1)
+        pkg_name = pkg_name.strip()
+        version = version.strip()
+
+        if not pkg_name or not version:
+            raise ConfigurationError(
+                f"Invalid --released value {spec!r}; use package=version"
+            )
+
+        managed = packages_by_name.get(pkg_name)
+        language = config.language or Language.PYTHON
+        root = repo_root
+        manifest = repo_root / "pyproject.toml"
+
+        if managed is not None:
+            language = managed.language or language
+            root = repo_root / managed.path
+            manifest = resolve_package_manifest_path(managed, repo_root)
+
+        dep_name = manifest_dependency_name(manifest, language) or pkg_name
+
+        versions.append(
+            ReleasedProjectVersion(
+                package_name=pkg_name if managed else None,
+                dependency_name=dep_name,
+                version=version,
+                language=language,
+                root=root,
+                manifest_path=manifest,
+            )
+        )
+
+    return versions
 
 
 def _cli_at_most_one_version_selector(
@@ -264,6 +369,11 @@ def distlift_main_callback(
 
     tag_line = ", ".join(release_result.tag_names) or "(no tags)"
     typer.echo(f"{prefix}Released: {tag_line}")
+    _echo_dependency_updates(
+        release_result.dependency_updates,
+        dry_run=dry_run,
+        prefix=prefix,
+    )
     if release_result.commit_sha and not dry_run:
         typer.echo(f"Commit: {release_result.commit_sha}")
     if release_result.pushed_remotes:
@@ -589,6 +699,11 @@ def release_simple_command(
     if result.success:
         prefix = "[dry-run] " if dry_run else ""
         typer.echo(f"{prefix}Released: {', '.join(result.tag_names)}")
+        _echo_dependency_updates(
+            result.dependency_updates,
+            dry_run=dry_run,
+            prefix=prefix,
+        )
         if result.commit_sha and not dry_run:
             typer.echo(f"Commit: {result.commit_sha}")
         if result.pushed_remotes:
@@ -738,6 +853,11 @@ def release_monorepo_command(
     if result.success:
         prefix = "[dry-run] " if dry_run else ""
         typer.echo(f"{prefix}Released: {', '.join(result.tag_names)}")
+        _echo_dependency_updates(
+            result.dependency_updates,
+            dry_run=dry_run,
+            prefix=prefix,
+        )
     else:
         typer.echo(f"Release failed: {result.error}", err=True)
         raise typer.Exit(1)
@@ -779,6 +899,25 @@ def list_config_command(
     dep = config.deploy
     typer.echo(f"  deploy.tag_prefix      : {dep.tag_prefix}")
     typer.echo(f"  deploy.verify_indexes  : {dep.verify_indexes}")
+    du = config.dependency_updates
+    typer.echo(f"  dependency_updates.enabled : {du.enabled}")
+    typer.echo(
+        "  dependency_updates.include_current_monorepo : "
+        f"{du.include_current_monorepo}"
+    )
+    typer.echo(
+        "  dependency_updates.python_version_template : "
+        f"{du.python_version_template}"
+    )
+    typer.echo(
+        "  dependency_updates.javascript_version_template : "
+        f"{du.javascript_version_template}"
+    )
+    typer.echo(f"  dependency_updates.rules : {len(du.rules)}")
+    typer.echo(
+        "  dependency_updates.external_monorepos : "
+        f"{len(du.external_monorepos)}"
+    )
     hooks = config.hooks
     typer.echo("  hooks (counts per event):")
     typer.echo(f"    tag_pushed        : {len(hooks.tag_pushed)}")
@@ -788,6 +927,9 @@ def list_config_command(
     typer.echo(f"    build_failed      : {len(hooks.build_failed)}")
     typer.echo(f"    publish_succeeded : {len(hooks.publish_succeeded)}")
     typer.echo(f"    publish_failed    : {len(hooks.publish_failed)}")
+    typer.echo(
+        f"    dependencies_autoupdated : {len(hooks.dependencies_autoupdated)}"
+    )
     typer.echo("  optional hook env append (after TOML merge), e.g.:")
     for _ev, suf in sorted(
         HOOK_ENV_KEY_SUFFIXES.items(), key=lambda item: item[0]
@@ -1213,6 +1355,154 @@ def deploy_command(
             typer.echo(
                 f"  verified {check.label} {check.registry_name}@{check.version}"
             )
+
+
+@dependencies_app.command("autoupdate")
+def dependencies_autoupdate_command(
+    released: Annotated[
+        list[str],
+        typer.Option(
+            "--released",
+            help="Released package=version (repeat for multiple packages).",
+        ),
+    ],
+    config_path: Annotated[
+        Path | None, typer.Option("--config", help="Extra config file")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Preview without writing files")
+    ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
+    repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
+) -> None:
+    """Update dependent project manifests outside the release cycle.
+
+    Args:
+        released: One or more ``package=version`` pairs for simulated releases.
+        config_path: Optional extra TOML config path merged before the run.
+        dry_run: When True, report changes without writing manifests.
+        verbose: When True, enable verbose logging.
+        repo_root: Repository root directory path.
+    """
+    configure_logging(verbose)
+    application = DistliftApplication()
+    extra = [config_path] if config_path else None
+    root = repo_root.resolve()
+    config = application.load_effective_config(root, extra)
+
+    try:
+        validate_resolved_config(config)
+        released_versions = _parse_released_specs(released, config, root)
+        results = application.run_dependency_autoupdate(
+            root,
+            config,
+            released_versions,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        typer.echo(f"Dependency autoupdate failed: {exc}", err=True)
+        raise typer.Exit(1)
+
+    prefix = "[dry-run] " if dry_run else ""
+    _echo_dependency_updates(results, dry_run=dry_run, prefix=prefix)
+
+
+@plugins_app.command("create-dependency-updater")
+def create_dependency_updater_command(
+    name: Annotated[str, typer.Argument(help="Plugin project name.")],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", help="Output directory for the plugin."),
+    ] = None,
+    watch_package: Annotated[
+        list[str],
+        typer.Option(
+            "--watch-package",
+            help="Released package that triggers updates (repeatable).",
+        ),
+    ] = [],
+    project: Annotated[
+        list[str],
+        typer.Option(
+            "--project",
+            help="Dependent project to update (default: all).",
+        ),
+    ] = ["*"],
+    monorepo: Annotated[
+        list[str],
+        typer.Option(
+            "--monorepo",
+            help="External monorepo path to scan (repeatable).",
+        ),
+    ] = [],
+    python_version_template: Annotated[
+        str,
+        typer.Option(
+            "--python-version-template",
+            help="Default Python specifier template.",
+        ),
+    ] = ">={version}",
+    javascript_version_template: Annotated[
+        str,
+        typer.Option(
+            "--javascript-version-template",
+            help="Default JavaScript specifier template.",
+        ),
+    ] = "^{version}",
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite existing files.")
+    ] = False,
+) -> None:
+    """Scaffold a pip-installable dependency updater plugin project.
+
+    Args:
+        name: Plugin name used for the Python package and entry point.
+        output: Directory to write the plugin project (default: plugins/NAME).
+        watch_package: Packages whose releases trigger dependency updates.
+        project: Dependent projects to update for each watch package.
+        monorepo: External monorepo roots to include in the plugin config.
+        python_version_template: Default Python version specifier template.
+        javascript_version_template: Default JavaScript version template.
+        force: When True, overwrite files that already exist.
+    """
+    output_dir = output or Path("plugins") / name
+    rules: list[DependencyUpdateRule] = []
+
+    if not watch_package:
+        watch_package = [name]
+
+    for pkg in watch_package:
+        rules.append(
+            DependencyUpdateRule(
+                package=pkg,
+                projects=list(project) if project else ["*"],
+            )
+        )
+
+    external = [
+        ExternalMonorepoDependencyUpdateConfig(path=p, projects=["*"])
+        for p in monorepo
+    ]
+
+    options = DependencyUpdaterTemplateOptions(
+        name=name,
+        output_dir=output_dir,
+        rules=rules,
+        external_monorepos=external,
+        force=force,
+        python_version_template=python_version_template,
+        javascript_version_template=javascript_version_template,
+    )
+
+    try:
+        written = create_dependency_updater_plugin(options)
+    except Exception as exc:
+        typer.echo(f"Failed to create plugin: {exc}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Created dependency updater plugin in {output_dir.resolve()}:")
+    for path in written:
+        typer.echo(f"  {path}")
 
 
 @plugins_app.command("list")

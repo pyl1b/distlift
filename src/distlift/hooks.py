@@ -24,6 +24,11 @@ def build_hook_env(
     commit_sha: str | None = None,
     package: str | None = None,
     error: str | None = None,
+    dependency_update_count: int | None = None,
+    dependency_update_projects: Sequence[str] | None = None,
+    dependency_update_files: Sequence[str] | None = None,
+    dependency_update_dependencies: Sequence[str] | None = None,
+    dependency_update_triggers: Sequence[str] | None = None,
 ) -> dict[str, str]:
     """Assemble environment variables passed to every hook subprocess.
 
@@ -36,6 +41,11 @@ def build_hook_env(
         commit_sha: Optional release commit hash when known.
         package: Optional monorepo package label for per-package events.
         error: Optional error text for failure events.
+        dependency_update_count: Number of dependency declarations updated.
+        dependency_update_projects: Dependent project names (sorted).
+        dependency_update_files: Manifest paths that were updated (sorted).
+        dependency_update_dependencies: Dependency names that changed (sorted).
+        dependency_update_triggers: Released packages that triggered updates.
     """
     env: dict[str, str] = {
         "DISTLIFT_EVENT": event,
@@ -57,6 +67,29 @@ def build_hook_env(
 
     if error is not None:
         env["DISTLIFT_ERROR"] = error
+
+    if dependency_update_count is not None:
+        env["DISTLIFT_DEPENDENCY_UPDATE_COUNT"] = str(dependency_update_count)
+
+    if dependency_update_projects is not None:
+        env["DISTLIFT_DEPENDENCY_UPDATE_PROJECTS"] = ",".join(
+            sorted(dependency_update_projects)
+        )
+
+    if dependency_update_files is not None:
+        env["DISTLIFT_DEPENDENCY_UPDATE_FILES"] = ",".join(
+            sorted(str(p) for p in dependency_update_files)
+        )
+
+    if dependency_update_dependencies is not None:
+        env["DISTLIFT_DEPENDENCY_UPDATE_DEPENDENCIES"] = ",".join(
+            sorted(dependency_update_dependencies)
+        )
+
+    if dependency_update_triggers is not None:
+        env["DISTLIFT_DEPENDENCY_UPDATE_TRIGGERS"] = ",".join(
+            sorted(dependency_update_triggers)
+        )
 
     return env
 

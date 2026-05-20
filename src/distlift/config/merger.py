@@ -8,6 +8,7 @@ import attrs
 
 from distlift.config.models import (
     ChangelogConfig,
+    DependencyUpdatesConfig,
     DeployConfig,
     HooksConfig,
     ManagedPackageConfig,
@@ -143,7 +144,52 @@ _HOOK_MERGE_FIELDS = (
     "build_failed",
     "publish_succeeded",
     "publish_failed",
+    "dependencies_autoupdated",
 )
+
+
+def merge_dependency_updates_layers(
+    layers: Sequence[RawConfig],
+) -> DependencyUpdatesConfig:
+    """Merge dependency update settings from all configuration layers.
+
+    Scalar fields use the last layer that sets each key. ``rules`` and
+    ``external_monorepos`` lists are taken entirely from the highest-precedence
+    layer that provides a non-empty list.
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
+    """
+    base = DependencyUpdatesConfig()
+    enabled = base.enabled
+    include_current = base.include_current_monorepo
+    python_template = base.python_version_template
+    javascript_template = base.javascript_version_template
+    rules = base.rules
+    external = base.external_monorepos
+
+    for layer in layers:
+        du = layer.dependency_updates
+
+        enabled = du.enabled
+        include_current = du.include_current_monorepo
+        python_template = du.python_version_template
+        javascript_template = du.javascript_version_template
+
+        if du.rules:
+            rules = list(du.rules)
+
+        if du.external_monorepos:
+            external = list(du.external_monorepos)
+
+    return DependencyUpdatesConfig(
+        enabled=enabled,
+        include_current_monorepo=include_current,
+        python_version_template=python_template,
+        javascript_version_template=javascript_template,
+        rules=rules,
+        external_monorepos=external,
+    )
 
 
 def merge_hooks_layers(layers: Sequence[RawConfig]) -> HooksConfig:
@@ -357,6 +403,8 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
 
     hooks_config = merge_hooks_layers(layers)
 
+    dependency_updates_config = merge_dependency_updates_layers(layers)
+
     return ResolvedConfig(
         language=language,
         mode=mode or ReleaseMode.SIMPLE,
@@ -377,6 +425,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         monorepo=monorepo_config,
         changelog=changelog_config,
         deploy=deploy_config,
+        dependency_updates=dependency_updates_config,
         hooks=hooks_config,
         field_sources=field_sources,
     )
