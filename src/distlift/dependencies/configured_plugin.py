@@ -10,7 +10,11 @@ from distlift.config.loader import (
     dependency_updates_from_mapping,
     load_toml_config,
 )
-from distlift.config.models import DependencyUpdatesConfig, ReleaseMode
+from distlift.config.models import (
+    DependencyUpdatesConfig,
+    ExternalMonorepoDependencyUpdateConfig,
+    ReleaseMode,
+)
 from distlift.dependencies.models import (
     DependencyUpdateRequest,
     DependencyUpdateResult,
@@ -23,6 +27,7 @@ from distlift.dependencies.projects import (
 from distlift.dependencies.service import (
     matching_released_version,
     select_projects_for_rule,
+    update_external_monorepos_for_released_versions,
     update_projects_for_released_versions,
 )
 from distlift.plugins.base import DependencyUpdaterPlugin
@@ -148,4 +153,66 @@ class ConfiguredDependencyUpdaterPlugin(DependencyUpdaterPlugin):
             updater_name=self.name,
             changes=all_changes,
             warnings=warnings,
+        )
+
+
+@attrs.define
+class ExternalMonorepoDependencyUpdaterPlugin(DependencyUpdaterPlugin):
+    """Dependency updater plugin backed by external monorepo definitions.
+
+    Attributes:
+        name: Plugin name exposed in ``distlift plugins list``.
+        version: Plugin version string.
+        external_monorepos: External monorepos scanned for dependent updates.
+    """
+
+    name: str
+    version: str
+    external_monorepos: list[ExternalMonorepoDependencyUpdateConfig]
+
+    def get_name(self) -> str:
+        """Return the unique plugin name."""
+        return self.name
+
+    def get_version(self) -> str:
+        """Return the plugin version string."""
+        return self.version
+
+    def get_updater_name(self) -> str:
+        """Return the unique dependency updater name."""
+        return self.name
+
+    def register(self, registry: PluginRegistry) -> None:
+        """Register this dependency updater.
+
+        Args:
+            registry: Registry receiving the updater binding.
+        """
+        registry.register_dependency_updater_plugin(
+            self, source="configured-external"
+        )
+
+    def update_dependencies(
+        self, request: DependencyUpdateRequest
+    ) -> DependencyUpdateResult:
+        """Apply external monorepo dependency updates for this release.
+
+        Args:
+            request: Dependency update inputs for this run.
+        """
+        released = list(request.released_versions)
+
+        if request.config.mode == ReleaseMode.MONOREPO:
+            released = filter_trigger_enabled_released_versions(
+                released, request.config.monorepo.packages
+            )
+
+        if not released or not self.external_monorepos:
+            return DependencyUpdateResult(updater_name=self.name)
+
+        return update_external_monorepos_for_released_versions(
+            request,
+            self.external_monorepos,
+            updater_name=self.name,
+            released_versions=released,
         )

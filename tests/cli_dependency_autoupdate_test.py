@@ -54,7 +54,7 @@ def _setup_two_package_repo(tmp_path):
 
 
 class TestCliDependencyAutoupdate:
-    """CLI tests for the dependencies autoupdate command."""
+    """CLI tests for the deps autoupdate command."""
 
     def test_autoupdate_dry_run(self, tmp_path) -> None:
         """Preview dependency updates without writing files."""
@@ -65,7 +65,33 @@ class TestCliDependencyAutoupdate:
         result = runner.invoke(
             app,
             [
-                "dependencies",
+                "deps",
+                "autoupdate",
+                "--released",
+                "a=1.2.0",
+                "--repo-root",
+                str(tmp_path),
+                "--dry-run",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "would update" in result.output
+        assert (
+            "pkg-a>=1.0.0"
+            in (tmp_path / "packages" / "b" / "pyproject.toml").read_text()
+        )
+
+    def test_autoupdate_short_group_name(self, tmp_path) -> None:
+        """The autoupdate command is exposed under the deps group."""
+        _setup_two_package_repo(tmp_path)
+        (tmp_path / "distlift.toml").write_text(_MONOREPO_TOML)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "deps",
                 "autoupdate",
                 "--released",
                 "a=1.2.0",
@@ -91,7 +117,7 @@ class TestCliDependencyAutoupdate:
         result = runner.invoke(
             app,
             [
-                "dependencies",
+                "deps",
                 "autoupdate",
                 "--released",
                 "a=1.2.0",
@@ -116,7 +142,7 @@ class TestCliDependencyAutoupdate:
         result = runner.invoke(
             app,
             [
-                "dependencies",
+                "deps",
                 "autoupdate",
                 "--released",
                 "a=1.2.0",

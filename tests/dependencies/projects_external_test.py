@@ -5,8 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from distlift.app import DistliftApplication
 from distlift.config.models import (
     DependencyUpdatesConfig,
@@ -23,11 +21,10 @@ from distlift.dependencies.models import (
 )
 from distlift.dependencies.projects import load_external_monorepo_projects
 from distlift.dependencies.service import run_builtin_dependency_updates
-from distlift.errors import ConfigurationError
 
 
 class TestExternalMonorepoProjects:
-    """Tests for in-repo external monorepo scanning."""
+    """Tests for external monorepo scanning."""
 
     def test_load_external_monorepo_projects(self, tmp_git_repo: Path) -> None:
         """Load managed projects from a nested monorepo inside the release repo."""
@@ -63,19 +60,90 @@ path = "packages/d"
         assert len(projects) == 1
         assert projects[0].name == "d"
 
-    def test_rejects_external_path_outside_repo(self, tmp_path: Path) -> None:
-        """Raise ConfigurationError when the external root is outside the repo."""
+    def test_loads_external_path_outside_repo(self, tmp_path: Path) -> None:
+        """Load managed projects from a monorepo outside the release repo."""
+        release_root = tmp_path / "release"
+        release_root.mkdir()
+
         outside = tmp_path / "outside"
-        outside.mkdir()
+        (outside / "packages" / "d").mkdir(parents=True)
+        (outside / "packages" / "d" / "pyproject.toml").write_text(
+            '[project]\nname = "pkg-d"\nversion = "0.1.0"\n'
+            'dependencies = ["pkg-a>=1.0.0"]\n'
+        )
+        (outside / "distlift.toml").write_text(
+            """
+[release]
+mode = "monorepo"
+language = "python"
+
+[[monorepo.packages]]
+name = "d"
+path = "packages/d"
+"""
+        )
         app = DistliftApplication()
 
-        with pytest.raises(ConfigurationError, match="outside the release"):
-            load_external_monorepo_projects(
-                tmp_path / "repo",
-                outside,
-                [],
-                app,
-            )
+        projects = load_external_monorepo_projects(
+            release_root,
+            outside,
+            [],
+            app,
+        )
+
+        assert len(projects) == 1
+        assert projects[0].name == "d"
+
+    def test_loads_simple_repo_version_files(self, tmp_path: Path) -> None:
+        """Load dependency projects from a simple external distlift repo."""
+        release_root = tmp_path / "release"
+        release_root.mkdir()
+
+        outside = tmp_path / "outside"
+        (outside / "backend").mkdir(parents=True)
+        (outside / "frontend").mkdir(parents=True)
+        (outside / "backend" / "pyproject.toml").write_text(
+            '[project]\nname = "app-backend"\nversion = "0.1.0"\n'
+            'dependencies = ["pkg-a>=1.0.0"]\n'
+        )
+        (outside / "frontend" / "package.json").write_text(
+            "{\n"
+            '  "name": "app-frontend",\n'
+            '  "version": "0.1.0",\n'
+            '  "dependencies": {\n'
+            '    "@advtslib/i18n": "^0.1.0"\n'
+            "  }\n"
+            "}\n"
+        )
+        (outside / "distlift.toml").write_text(
+            """
+mode = "simple"
+version_source = "manifest"
+
+[[version_files]]
+path = "backend/pyproject.toml"
+kind = "pyproject"
+primary = true
+
+[[version_files]]
+path = "frontend/package.json"
+kind = "package-json"
+"""
+        )
+        app = DistliftApplication()
+
+        projects = load_external_monorepo_projects(
+            release_root,
+            outside,
+            [],
+            app,
+        )
+
+        names = {project.name for project in projects}
+        manifests = {project.manifest_path.name for project in projects}
+
+        assert names == {"outside/backend", "outside/frontend"}
+        assert manifests == {"pyproject.toml", "package.json"}
 
     def test_release_updates_external_monorepo_dependent(
         self, tmp_git_repo: Path

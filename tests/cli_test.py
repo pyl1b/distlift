@@ -19,9 +19,19 @@ runner = CliRunner()
 
 class TestCLI:
     def test_help(self):
-        result = runner.invoke(app, ["--help"])
+        result = runner.invoke(app, ["-h"])
         assert result.exit_code == 0
         assert "distlift" in result.output.lower()
+
+    def test_program_version_short_option(self):
+        result = runner.invoke(app, ["-v"])
+        assert result.exit_code == 0
+        assert result.output.strip()
+
+    def test_release_help_short_option(self):
+        result = runner.invoke(app, ["release", "-h"])
+        assert result.exit_code == 0
+        assert "Release commands" in result.output
 
     def test_release_simple_no_selector_fails(self):
         result = runner.invoke(app, ["release", "simple"])
@@ -107,7 +117,7 @@ class TestCLI:
     def test_no_subcommand_rejects_two_version_selectors(
         self, tmp_python_project: Path
     ) -> None:
-        """At most one of ``--major``/``--minor``/``--patch``/``--version``."""
+        """At most one of bump flags and ``--release-version``."""
 
         result = runner.invoke(
             app,
@@ -155,10 +165,46 @@ class TestCLI:
         )
         runner.invoke(
             app,
-            ["--repo-root", str(tmp_python_project), "--major"],
+            ["--repo-root", str(tmp_python_project), "-1"],
         )
         assert captured["bump"] == BumpKind.MAJOR
         assert captured["explicit_version"] is None
+
+    def test_no_subcommand_forwards_minor_bump_short_flag(
+        self, tmp_python_project: Path, monkeypatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run_default_command(
+            self: DistliftApplication,
+            repo_root: Path,
+            config: object,
+            *,
+            dry_run: bool,
+            build: bool,
+            publish: bool,
+            all_changed: bool = True,
+            skip_changelog: bool = False,
+            skip_changelog_editor: bool = False,
+            bump: BumpKind | None = None,
+            explicit_version: str | None = None,
+            registry: object | None = None,
+        ) -> tuple[ReleaseResult, PublishRunResult | None]:
+            captured["bump"] = bump
+            return ReleaseResult(
+                success=True, dry_run=dry_run, tag_names=[]
+            ), None
+
+        monkeypatch.setattr(
+            DistliftApplication,
+            "run_default_command",
+            fake_run_default_command,
+        )
+        runner.invoke(
+            app,
+            ["--repo-root", str(tmp_python_project), "-2"],
+        )
+        assert captured["bump"] == BumpKind.MINOR
 
     def test_no_subcommand_forwards_explicit_version(
         self, tmp_python_project: Path, monkeypatch
@@ -196,7 +242,7 @@ class TestCLI:
             [
                 "--repo-root",
                 str(tmp_python_project),
-                "--version",
+                "--release-version",
                 "2.0.0",
             ],
         )
@@ -238,7 +284,7 @@ class TestCLI:
                 "monorepo",
                 "--repo-root",
                 str(tmp_git_repo),
-                "--version",
+                "--release-version",
                 "9.9.9",
             ],
         )
@@ -287,8 +333,8 @@ class TestCLI:
             [
                 "--repo-root",
                 str(tmp_python_project),
-                "--build",
-                "--publish",
+                "-b",
+                "-p",
             ],
         )
         assert captured["build"] is True
@@ -346,7 +392,7 @@ class TestCLI:
                 "preview",
                 "--repo-root",
                 str(tmp_python_project),
-                "--version",
+                "--release-version",
                 "0.2.0",
             ],
         )

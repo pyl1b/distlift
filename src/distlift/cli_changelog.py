@@ -37,6 +37,7 @@ from distlift.versioning.resolver import find_latest_matching_tag
 changelog_app = typer.Typer(
     help="Inspect or update Keep a Changelog Markdown files.",
     no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 
@@ -178,7 +179,7 @@ def _build_plan_for_cli(
 def changelog_preview_command(
     version: Annotated[
         str,
-        typer.Option("--version", "-v", help="Released version label."),
+        typer.Option("--release-version", help="Released version label."),
     ],
     package: Annotated[
         str | None,
@@ -211,7 +212,7 @@ def changelog_preview_command(
 def changelog_update_command(
     version: Annotated[
         str,
-        typer.Option("--version", "-v", help="Released version label."),
+        typer.Option("--release-version", help="Released version label."),
     ],
     package: Annotated[
         str | None,

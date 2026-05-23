@@ -9,6 +9,7 @@ from typing import Annotated
 import attrs
 import typer
 
+from distlift import __version__
 from distlift.app import DistliftApplication
 from distlift.cli_changelog import changelog_app
 from distlift.config.files import (
@@ -45,30 +46,47 @@ from distlift.release.models import (
     SimpleReleaseRequest,
 )
 
+_HELP_OPTION_NAMES = {"help_option_names": ["-h", "--help"]}
+
 app = typer.Typer(
     name="distlift",
+    context_settings=_HELP_OPTION_NAMES,
     help=(
         "Release orchestrator for Python and JavaScript packages. "
         "With no subcommand, bumps patch by default; use --major/--minor/"
-        "--patch/--version for a different release. Updates manifests, "
+        "--patch/--release-version for a different release. Updates "
+        "manifests, "
         "commits, tags, and pushes. Use --build or --publish to add "
         "distribution steps. Use the ``build`` subcommand to build from "
         "manifest versions only, without releasing."
     ),
 )
-release_app = typer.Typer(help="Release commands.", no_args_is_help=True)
-config_app = typer.Typer(help="Configuration commands.", no_args_is_help=True)
-plugins_app = typer.Typer(help="Plugin commands.", no_args_is_help=True)
+release_app = typer.Typer(
+    help="Release commands.",
+    no_args_is_help=True,
+    context_settings=_HELP_OPTION_NAMES,
+)
+config_app = typer.Typer(
+    help="Configuration commands.",
+    no_args_is_help=True,
+    context_settings=_HELP_OPTION_NAMES,
+)
+plugins_app = typer.Typer(
+    help="Plugin commands.",
+    no_args_is_help=True,
+    context_settings=_HELP_OPTION_NAMES,
+)
 dependencies_app = typer.Typer(
     help="Dependency autoupdate commands.",
     no_args_is_help=True,
+    context_settings=_HELP_OPTION_NAMES,
 )
 
 app.add_typer(release_app, name="release")
 app.add_typer(config_app, name="config")
 app.add_typer(plugins_app, name="plugins")
 app.add_typer(changelog_app, name="changelog")
-app.add_typer(dependencies_app, name="dependencies")
+app.add_typer(dependencies_app, name="deps")
 
 
 def _echo_dependency_updates(
@@ -171,15 +189,15 @@ def _cli_at_most_one_version_selector(
         major: Whether ``--major`` was passed.
         minor: Whether ``--minor`` was passed.
         patch: Whether ``--patch`` was passed.
-        version: Value of ``--version`` when set.
+        version: Value of ``--release-version`` when set.
         cmd_label: Command name printed in the error message.
     """
     n_selectors = sum([major, minor, patch, version is not None])
 
     if n_selectors > 1:
         typer.echo(
-            f"{cmd_label}: use at most one of --major, --minor, --patch, "
-            "or --version.",
+            f"{cmd_label}: use at most one of --major, --minor, --patch, or "
+            "--release-version.",
             err=True,
         )
         raise typer.Exit(1)
@@ -219,9 +237,32 @@ def _stdin_is_interactive() -> bool:
     return sys.stdin.isatty()
 
 
+def _version_option_callback(value: bool) -> None:
+    """Print the distlift program version and exit when requested.
+
+    Args:
+        value: Whether the ``--version`` / ``-v`` flag was passed.
+    """
+    if not value:
+        return
+
+    typer.echo(__version__)
+    raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
 def distlift_main_callback(
     ctx: typer.Context,
+    show_version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-v",
+            callback=_version_option_callback,
+            is_eager=True,
+            help="Show program version and exit.",
+        ),
+    ] = False,
     config_path: Annotated[
         Path | None,
         typer.Option("--config", help="Extra config file"),
@@ -251,6 +292,7 @@ def distlift_main_callback(
         bool,
         typer.Option(
             "--build",
+            "-b",
             help="After a successful release, build distributions locally.",
         ),
     ] = False,
@@ -258,6 +300,7 @@ def distlift_main_callback(
         bool,
         typer.Option(
             "--publish",
+            "-p",
             help=(
                 "After a successful release, build and upload to the "
                 "configured registry."
@@ -282,17 +325,19 @@ def distlift_main_callback(
         ),
     ] = False,
     major: Annotated[
-        bool, typer.Option("--major", help="Bump major version")
+        bool, typer.Option("--major", "-1", help="Bump major version")
     ] = False,
     minor: Annotated[
-        bool, typer.Option("--minor", help="Bump minor version")
+        bool, typer.Option("--minor", "-2", help="Bump minor version")
     ] = False,
     patch: Annotated[
-        bool, typer.Option("--patch", help="Bump patch version")
+        bool, typer.Option("--patch", "-3", help="Bump patch version")
     ] = False,
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="Set explicit version"),
+        typer.Option(
+            "--release-version", help="Set the exact release version"
+        ),
     ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
     repo_root: Annotated[
@@ -304,6 +349,7 @@ def distlift_main_callback(
 
     Args:
         ctx: Typer invocation context (used to detect bare ``distlift`` runs).
+        show_version: When ``True``, print the distlift program version.
         config_path: Optional extra TOML config path merged after defaults.
         dry_run: When ``True``, plan release without Git writes.
         all_changed: When ``True`` (default), only release monorepo packages
@@ -317,7 +363,7 @@ def distlift_main_callback(
         major: When ``True``, bump the major version.
         minor: When ``True``, bump the minor version.
         patch: When ``True``, bump the patch version.
-        version: Optional explicit version (mutually exclusive with bump flags).
+        version: Optional explicit release version.
         verbose: When ``True``, enable verbose logging for this process.
         repo_root: Filesystem path to the repository root directory.
     """
@@ -586,17 +632,19 @@ def release_simple_command(
         ),
     ] = None,
     major: Annotated[
-        bool, typer.Option("--major", help="Bump major version")
+        bool, typer.Option("--major", "-1", help="Bump major version")
     ] = False,
     minor: Annotated[
-        bool, typer.Option("--minor", help="Bump minor version")
+        bool, typer.Option("--minor", "-2", help="Bump minor version")
     ] = False,
     patch: Annotated[
-        bool, typer.Option("--patch", help="Bump patch version")
+        bool, typer.Option("--patch", "-3", help="Bump patch version")
     ] = False,
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="Set explicit version"),
+        typer.Option(
+            "--release-version", help="Set the exact release version"
+        ),
     ] = None,
     config_path: Annotated[
         Path | None, typer.Option("--config", help="Extra config file")
@@ -635,8 +683,7 @@ def release_simple_command(
         major: When ``True``, request a major version bump.
         minor: When ``True``, request a minor version bump.
         patch: When ``True``, request a patch version bump.
-        version: Optional explicit version string (mutually exclusive with
-            bump flags).
+        version: Optional explicit release version string.
         config_path: Optional extra TOML config path.
         remote: Optional Git remote names for push operations.
         default_version: Optional fallback version when no prior tag exists.
@@ -649,7 +696,8 @@ def release_simple_command(
     selectors = sum([major, minor, patch, version is not None])
     if selectors == 0:
         typer.echo(
-            "Provide one of --major, --minor, --patch, or --version.", err=True
+            "Provide one of --major, --minor, --patch, or --release-version.",
+            err=True,
         )
         raise typer.Exit(1)
     if selectors > 1:
@@ -730,23 +778,27 @@ def release_monorepo_command(
         typer.Option("--package", "-p", help="Specific package name(s)"),
     ] = None,
     major: Annotated[
-        bool, typer.Option("--major", help="Bump major version")
+        bool, typer.Option("--major", "-1", help="Bump major version")
     ] = False,
     minor: Annotated[
-        bool, typer.Option("--minor", help="Bump minor version")
+        bool, typer.Option("--minor", "-2", help="Bump minor version")
     ] = False,
     patch: Annotated[
-        bool, typer.Option("--patch", help="Bump patch version")
+        bool, typer.Option("--patch", "-3", help="Bump patch version")
     ] = False,
     version: Annotated[
         str | None,
-        typer.Option("--version", "-v", help="Set the same explicit version"),
+        typer.Option(
+            "--release-version", help="Set the same exact release version"
+        ),
     ] = None,
     default_bump: Annotated[
         str,
         typer.Option(
             "--default-bump",
-            help="Bump kind when no --major/--minor/--patch/--version",
+            help=(
+                "Bump kind when no --major/--minor/--patch/--release-version"
+            ),
         ),
     ] = "patch",
     config_path: Annotated[Path | None, typer.Option("--config")] = None,

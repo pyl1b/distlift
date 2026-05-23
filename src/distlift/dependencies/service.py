@@ -7,6 +7,7 @@ from pathlib import Path
 from distlift.config.models import (
     DependencyUpdateRule,
     DependencyUpdatesConfig,
+    ExternalMonorepoDependencyUpdateConfig,
     Language,
     ReleaseMode,
 )
@@ -153,12 +154,50 @@ def run_builtin_dependency_updates(
             all_changes.extend(result.changes)
             warnings.extend(result.warnings)
 
-    # External monorepos
+    external_result = update_external_monorepos_for_released_versions(
+        request,
+        du.external_monorepos,
+        updater_name=_BUILTIN_UPDATER_NAME,
+        released_versions=released,
+        seen=seen,
+    )
+    all_changes.extend(external_result.changes)
+    warnings.extend(external_result.warnings)
+
+    return DependencyUpdateResult(
+        updater_name=_BUILTIN_UPDATER_NAME,
+        changes=all_changes,
+        warnings=warnings,
+    )
+
+
+def update_external_monorepos_for_released_versions(
+    request: DependencyUpdateRequest,
+    external_monorepos: list[ExternalMonorepoDependencyUpdateConfig],
+    *,
+    updater_name: str,
+    released_versions: list[ReleasedProjectVersion],
+    seen: set[tuple[str, str, str]] | None = None,
+) -> DependencyUpdateResult:
+    """Update dependent manifests in configured external monorepos.
+
+    Args:
+        request: Dependency update inputs for this run.
+        external_monorepos: External monorepos to scan for dependents.
+        updater_name: Result label for the caller.
+        released_versions: Released versions that should trigger updates.
+        seen: Optional dedupe set shared with the caller.
+    """
     from distlift.app import DistliftApplication
 
     app = DistliftApplication()
+    repo_root = request.repo_root.resolve()
+    du = request.config.dependency_updates
+    changes: list[DependencyUpdateChange] = []
+    warnings: list[str] = []
+    seen_keys = seen if seen is not None else set()
 
-    for ext in du.external_monorepos:
+    for ext in external_monorepos:
         ext_root = Path(ext.path)
 
         if not ext_root.is_absolute():
@@ -173,6 +212,7 @@ def run_builtin_dependency_updates(
                 config_paths,
                 app,
             )
+            ext_config = app.load_effective_config(ext_root, config_paths)
         except Exception as exc:
             log.log(
                 1,
@@ -190,28 +230,26 @@ def run_builtin_dependency_updates(
             allowed = set(ext.projects)
             ext_projects = [p for p in ext_projects if p.name in allowed]
 
-        if ext_projects and config.mode == ReleaseMode.MONOREPO:
-            ext_config = app.load_effective_config(ext_root, config_paths)
+        if ext_config.mode == ReleaseMode.MONOREPO:
             ext_projects = filter_receive_enabled_dependency_projects(
                 ext_projects, ext_config.monorepo.packages
             )
 
-        for rv in released:
-            result = update_projects_for_released_versions(
-                ext_projects,
-                [rv],
-                du,
-                rule=None,
-                dry_run=request.dry_run,
-                seen=seen,
-                skip_self=True,
-            )
-            all_changes.extend(result.changes)
-            warnings.extend(result.warnings)
+        result = update_projects_for_released_versions(
+            ext_projects,
+            released_versions,
+            du,
+            rule=None,
+            dry_run=request.dry_run,
+            seen=seen_keys,
+            skip_self=True,
+        )
+        changes.extend(result.changes)
+        warnings.extend(result.warnings)
 
     return DependencyUpdateResult(
-        updater_name=_BUILTIN_UPDATER_NAME,
-        changes=all_changes,
+        updater_name=updater_name,
+        changes=changes,
         warnings=warnings,
     )
 

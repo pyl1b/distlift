@@ -16,7 +16,7 @@ from distlift.dependencies.models import (
     DependencyProject,
     ReleasedProjectVersion,
 )
-from distlift.errors import ConfigurationError
+from distlift.manifests.handler import kind_for_language
 from distlift.manifests.package_json_file import (
     get_package_name,
     read_package_json,
@@ -88,6 +88,51 @@ def dependency_project_from_target(target: ReleaseTarget) -> DependencyProject:
     )
 
 
+def dependency_projects_from_target(
+    target: ReleaseTarget,
+) -> list[DependencyProject]:
+    """Convert a release target into one or more dependency project records.
+
+    Args:
+        target: Release target with manifest and version-file metadata.
+    """
+    if not target.version_files:
+        return [dependency_project_from_target(target)]
+
+    projects: list[DependencyProject] = []
+    multiple_files = len(target.version_files) > 1
+
+    for vf in target.version_files:
+        language = _language_for_manifest_kind(vf.kind)
+
+        if language is None:
+            continue
+
+        dep_name = manifest_dependency_name(vf.path, language)
+
+        if not dep_name:
+            continue
+
+        if target.package_name:
+            name = target.package_name
+        elif multiple_files:
+            name = f"{target.root.name}/{vf.path.parent.name}"
+        else:
+            name = target.root.name
+
+        projects.append(
+            DependencyProject(
+                name=name,
+                dependency_name=dep_name,
+                language=language,
+                root=vf.path.parent,
+                manifest_path=vf.path,
+            )
+        )
+
+    return projects
+
+
 def dependency_projects_from_config(
     repo_root: Path,
     config: ResolvedConfig,
@@ -101,11 +146,21 @@ def dependency_projects_from_config(
         registry: Plugin registry (reserved for future wiring).
     """
     from distlift.release.monorepo import discover_managed_targets
+    from distlift.release.simple import prepare_simple_target
 
-    packages = load_managed_packages(config)
-    pairs = discover_managed_targets(packages, repo_root, config, registry)
+    if config.mode == ReleaseMode.MONOREPO or config.monorepo.packages:
+        packages = load_managed_packages(config)
+        pairs = discover_managed_targets(packages, repo_root, config, registry)
 
-    return [dependency_project_from_target(target) for target, _ in pairs]
+        projects: list[DependencyProject] = []
+
+        for target, _ in pairs:
+            projects.extend(dependency_projects_from_target(target))
+
+        return projects
+
+    target, _ = prepare_simple_target(repo_root, config, registry)
+    return dependency_projects_from_target(target)
 
 
 def load_external_monorepo_projects(
@@ -114,24 +169,15 @@ def load_external_monorepo_projects(
     config_paths: list[Path],
     application: DistliftApplication,
 ) -> list[DependencyProject]:
-    """Load managed projects from another distlift monorepo.
+    """Load dependency projects from another distlift repository.
 
     Args:
-        repo_root: Release repository root (for outside-repo checks).
-        external_root: Root directory of the external monorepo.
+        repo_root: Release repository root for caller context.
+        external_root: Root directory of the external distlift repository.
         config_paths: Optional extra config file paths for that repo.
         application: Application facade used to load config and plugins.
     """
     resolved_external = external_root.resolve()
-
-    try:
-        resolved_external.relative_to(repo_root.resolve())
-    except ValueError:
-        raise ConfigurationError(
-            f"External monorepo path {external_root} is outside the release "
-            f"repository {repo_root}; only in-repo external paths are "
-            "supported in this release"
-        ) from None
 
     config = application.load_effective_config(
         resolved_external,
@@ -141,12 +187,6 @@ def load_external_monorepo_projects(
     from distlift.config.validators import validate_resolved_config
 
     validate_resolved_config(config)
-
-    if config.mode != ReleaseMode.MONOREPO and not config.monorepo.packages:
-        raise ConfigurationError(
-            f"External path {external_root} is not configured as a distlift "
-            "monorepo"
-        )
 
     registry = application.load_plugins(config)
 
@@ -269,5 +309,18 @@ def manifest_dependency_name(
     if language == Language.JAVASCRIPT:
         data = read_package_json(manifest_path)
         return get_package_name(data)
+
+    return None
+
+
+def _language_for_manifest_kind(kind: str) -> Language | None:
+    """Return the language enum implied by one manifest kind string.
+
+    Args:
+        kind: Manifest kind such as ``pyproject`` or ``package-json``.
+    """
+    for language in Language:
+        if kind_for_language(str(language)) == kind:
+            return language
 
     return None
