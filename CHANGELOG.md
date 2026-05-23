@@ -12,7 +12,15 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.7] - 2026-05-23
+
+### Changed
+
+- Extend external dependency autoupdate and refine CLI flags
 
 ## [0.1.6] - 2026-05-20
 
@@ -82,4 +90,5 @@
 [0.1.4]: https://github.com/pyl1b/distlift/compare/v0.1.3...v0.1.4
 [0.1.5]: https://github.com/pyl1b/distlift/compare/v0.1.4...v0.1.5
 [0.1.6]: https://github.com/pyl1b/distlift/compare/v0.1.5...v0.1.6
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.6...HEAD
+[0.1.7]: https://github.com/pyl1b/distlift/compare/v0.1.6...v0.1.7
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.7...HEAD
