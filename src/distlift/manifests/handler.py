@@ -108,9 +108,31 @@ class PackageJsonHandler(ManifestHandler):
         return False
 
 
+class SynologyInfoHandler(ManifestHandler):
+    """Manifest handler for Synology DSM ``INFO`` package metadata files."""
+
+    def detect(self, root: Path) -> Path | None:
+        candidate = root / "packaging" / "synology" / "INFO"
+        return candidate if candidate.is_file() else None
+
+    def read_version(self, path: Path) -> str | None:
+        from distlift.manifests.synology_info_file import read_info_version
+
+        return read_info_version(path)
+
+    def write_version(self, path: Path, version: str) -> None:
+        from distlift.manifests.synology_info_file import set_info_version
+
+        set_info_version(path, version)
+
+    def is_dynamic(self, path: Path) -> bool:
+        return False
+
+
 _BUILTIN_HANDLERS: dict[str, ManifestHandler] = {
     "pyproject": PyprojectHandler(),
     "package-json": PackageJsonHandler(),
+    "synology-info": SynologyInfoHandler(),
 }
 
 _LANGUAGE_TO_KIND: dict[str, str] = {

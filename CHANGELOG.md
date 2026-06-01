@@ -16,6 +16,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Manifest kind ``synology-info`` for Synology DSM ``INFO`` files; use
+  ``[[version_files]]`` with ``kind = "synology-info"`` to bump alongside
+  ``pyproject.toml``.
+
 ## [0.1.7] - 2026-05-23
 
 ### Changed
