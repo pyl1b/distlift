@@ -14,13 +14,15 @@
 
 
 
+
+
 ## [Unreleased]
+
+## [0.1.8] - 2026-06-01
 
 ### Added
 
-- Manifest kind ``synology-info`` for Synology DSM ``INFO`` files; use
-  ``[[version_files]]`` with ``kind = "synology-info"`` to bump alongside
-  ``pyproject.toml``.
+- Manifest kind ``synology-info`` for Synology DSM ``INFO`` files; use ``[[version_files]]`` with ``kind = "synology-info"`` to bump alongside ``pyproject.toml``.
 
 ## [0.1.7] - 2026-05-23
 
@@ -97,4 +99,5 @@
 [0.1.5]: https://github.com/pyl1b/distlift/compare/v0.1.4...v0.1.5
 [0.1.6]: https://github.com/pyl1b/distlift/compare/v0.1.5...v0.1.6
 [0.1.7]: https://github.com/pyl1b/distlift/compare/v0.1.6...v0.1.7
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.7...HEAD
+[0.1.8]: https://github.com/pyl1b/distlift/compare/v0.1.7...v0.1.8
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.8...HEAD
