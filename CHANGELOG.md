@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- PyPI trove classifier updated from Alpha to Production/Stable.
+
 ## [0.1.9] - 2026-07-13
 
 ### Added
