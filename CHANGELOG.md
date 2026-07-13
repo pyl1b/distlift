@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-13
+
 ### Changed
 
-- PyPI trove classifier updated from Alpha to Production/Stable.
+- Change development status from Alpha to Production/Stable.
 
 ## [0.1.9] - 2026-07-13
 
@@ -105,4 +107,5 @@
 [0.1.7]: https://github.com/pyl1b/distlift/compare/v0.1.6...v0.1.7
 [0.1.8]: https://github.com/pyl1b/distlift/compare/v0.1.7...v0.1.8
 [0.1.9]: https://github.com/pyl1b/distlift/compare/v0.1.8...v0.1.9
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.9...HEAD
+[1.0.0]: https://github.com/pyl1b/distlift/compare/v0.1.9...v1.0.0
+[unreleased]: https://github.com/pyl1b/distlift/compare/v1.0.0...HEAD
