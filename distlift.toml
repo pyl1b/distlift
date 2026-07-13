@@ -1,0 +1,28 @@
+# distlift configuration for this repository.
+#
+# Local releases (`distlift`, `distlift release simple`) bump pyproject.toml,
+# update CHANGELOG.md, commit, and push a `v{version}` tag. GitHub Actions
+# (.github/workflows/publish.yml) builds and publishes to PyPI on tag push.
+
+[release]
+mode = "simple"
+language = "python"
+tag_template = "v{version}"
+version_source = "manifest"
+manifest_path = "pyproject.toml"
+remotes = ["origin"]
+
+[changelog]
+enabled = true
+path = "CHANGELOG.md"
+compare_url_template = "https://github.com/pyl1b/distlift/compare/{prev}...{next}"
+
+[[build.targets]]
+name = "distlift"
+path = "."
+ecosystem = "python"
+
+[[publish.targets]]
+name = "distlift"
+path = "."
+ecosystem = "python"
