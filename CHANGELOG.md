@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-13
+
+### Changed
+
+- Account for narrower terminals in tests.
+
 ## [1.1.0] - 2026-07-13
 
 ### Added
@@ -129,4 +135,5 @@
 [0.1.9]: https://github.com/pyl1b/distlift/compare/v0.1.8...v0.1.9
 [1.0.0]: https://github.com/pyl1b/distlift/compare/v0.1.9...v1.0.0
 [1.1.0]: https://github.com/pyl1b/distlift/compare/v1.0.0...v1.1.0
-[unreleased]: https://github.com/pyl1b/distlift/compare/v1.1.0...HEAD
+[1.1.1]: https://github.com/pyl1b/distlift/compare/v1.1.0...v1.1.1
+[unreleased]: https://github.com/pyl1b/distlift/compare/v1.1.1...HEAD
