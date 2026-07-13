@@ -1,8 +1,24 @@
 """Tests for distlift dependencies autoupdate CLI."""
 
+import re
+
 from typer.testing import CliRunner
 
 from distlift.cli import app
+
+
+def _normalize_cli_help(output: str) -> str:
+    """Collapse CLI help output for stable substring checks.
+
+    Args:
+        output: Raw stdout from a Typer ``CliRunner`` invocation.
+    """
+    text = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    text = re.sub(r"\s+", " ", text)
+
+    # Rich may break long tokens such as ``monorepos`` across wrapped lines.
+    return text.replace("mono repos", "monorepos")
+
 
 _MONOREPO_TOML = """\
 mode = "monorepo"
@@ -56,12 +72,19 @@ def _setup_two_package_repo(tmp_path):
 class TestCliDependencyAutoupdate:
     """CLI tests for the deps autoupdate command."""
 
+    def test_normalize_cli_help_repairs_wrapped_monorepos(self) -> None:
+        """Wrapped help lines must not break monorepo phrase assertions."""
+        wrapped = (
+            "scan the current monorepo, configured external mono\nrepos, and"
+        )
+        assert "configured external monorepos" in _normalize_cli_help(wrapped)
+
     def test_autoupdate_help_explains_scope_and_side_effects(self) -> None:
         """Describe what autoupdate changes and what it deliberately omits."""
         runner = CliRunner()
 
         result = runner.invoke(app, ["deps", "autoupdate", "--help"])
-        help_text = " ".join(result.output.split())
+        help_text = _normalize_cli_help(result.output)
 
         assert result.exit_code == 0, result.output
         assert "During a distlift release" in help_text
