@@ -129,10 +129,56 @@ class SynologyInfoHandler(ManifestHandler):
         return False
 
 
+class PythonVersionHandler(ManifestHandler):
+    """Manifest handler for Python ``__version__.py`` files."""
+
+    def detect(self, root: Path) -> Path | None:
+        """Return no implicit file for root-level auto-detection.
+
+        Args:
+            root: Directory that may contain a project.
+        """
+        return None
+
+    def read_version(self, path: Path) -> str | None:
+        """Read ``__version__`` from ``path``.
+
+        Args:
+            path: Python version file to inspect.
+        """
+        from distlift.manifests.python_version_file import (
+            read_python_version,
+        )
+
+        return read_python_version(path)
+
+    def write_version(self, path: Path, version: str) -> None:
+        """Write ``version`` into ``path``.
+
+        Args:
+            path: Python version file to update.
+            version: New version string.
+        """
+        from distlift.manifests.python_version_file import (
+            set_python_version,
+        )
+
+        set_python_version(path, version)
+
+    def is_dynamic(self, path: Path) -> bool:
+        """Return False because the file stores a static assignment.
+
+        Args:
+            path: Python version file to inspect.
+        """
+        return False
+
+
 _BUILTIN_HANDLERS: dict[str, ManifestHandler] = {
     "pyproject": PyprojectHandler(),
     "package-json": PackageJsonHandler(),
     "synology-info": SynologyInfoHandler(),
+    "python-version": PythonVersionHandler(),
 }
 
 _LANGUAGE_TO_KIND: dict[str, str] = {

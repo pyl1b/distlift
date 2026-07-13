@@ -27,7 +27,7 @@ dependencies = [
     "attrs>=23.2",
     "click>=8.4",
     "packaging>=24",
-    "typer>=0.12",
+    "typer>=0.16",
     "tomlkit>=0.13",
 ]
 

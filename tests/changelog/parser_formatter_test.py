@@ -33,3 +33,24 @@ class TestChangelogParserFormatterRoundTrip:
         assert "# Title" in rendered
         assert "## [Unreleased]" in rendered
         assert "- Item one" in rendered
+
+    def test_render_is_idempotent_for_title_separator(self) -> None:
+        """Parse/render cycles must not accumulate blank lines after the title."""
+        text = (
+            "# Changelog\n"
+            "\n"
+            "## [Unreleased]\n"
+            "\n"
+            "## [1.0.0] - 2024-01-01\n"
+            "\n"
+            "### Added\n"
+            "\n"
+            "- Item one\n"
+        )
+
+        doc = parse_changelog_document(text)
+        rendered = render_changelog_document(doc)
+        again = render_changelog_document(parse_changelog_document(rendered))
+
+        assert rendered == again
+        assert rendered.startswith("# Changelog\n\n## [Unreleased]")

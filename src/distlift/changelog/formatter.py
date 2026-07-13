@@ -38,6 +38,27 @@ def _sort_sections(
     return ordered
 
 
+def _content_intro_lines(intro_lines: list[str]) -> list[str]:
+    """Return preamble lines with outer blank lines removed.
+
+    Blank-only ``intro_lines`` entries come from the single separator
+    between the document title and the first ``##`` release heading during
+    parse; they must not be re-emitted as extra blank lines on render.
+
+    Args:
+        intro_lines: Non-heading lines between the title and first release.
+    """
+    trimmed = [line.rstrip("\n") for line in intro_lines]
+
+    while trimmed and not trimmed[0].strip():
+        trimmed.pop(0)
+
+    while trimmed and not trimmed[-1].strip():
+        trimmed.pop()
+
+    return trimmed
+
+
 def render_release_entry(entry: ChangelogReleaseEntry) -> str:
     """Render a single ``##`` release block including ``###`` sections.
 
@@ -82,10 +103,12 @@ def render_changelog_document(doc: ChangelogDocument) -> str:
     lines.append(doc.title_line.strip())
     lines.append("")
 
-    for intro in doc.intro_lines:
+    content_intro = _content_intro_lines(doc.intro_lines)
+
+    for intro in content_intro:
         lines.append(intro.rstrip("\n"))
 
-    if doc.intro_lines:
+    if content_intro:
         lines.append("")
 
     for idx, rel in enumerate(doc.releases):

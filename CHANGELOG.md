@@ -18,6 +18,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Require Typer 0.16+ so ``--help`` works with Click 8.2 and newer (fixes
+  ``Parameter.make_metavar()`` errors when another package upgrades Click).
+- Changelog render no longer adds extra blank lines after the title when the
+  only preamble content is the separator before the first release heading.
+
+### Added
+
+- Manifest kind ``python-version`` for Python files containing
+  ``__version__ = "..."`` assignments.
+
 ## [0.1.8] - 2026-06-01
 
 ### Added
