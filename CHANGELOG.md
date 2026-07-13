@@ -2,38 +2,25 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-13
+
 ### Added
 
-- `distlift deps upgrade`: keyboard-driven interactive upgrader for
-  third-party dependencies across project sources, with per-dependency
-  version cycling, manifest updates, and lock-file refresh for pip, npm,
-  pnpm, and yarn.
-- `PackageManagerPlugin` capability and `[dependency_upgrades]` config
-  section for interactive upgrade timeouts and per-project manager
-  overrides.
+- `distlift deps upgrade`: keyboard-driven interactive upgrader for third-party dependencies across project sources, with per-dependency version cycling, manifest updates, and lock-file refresh for pip, npm, pnpm, and yarn.
+- `PackageManagerPlugin` capability and `[dependency_upgrades]` config section for interactive upgrade timeouts and per-project manager overrides.
 
 ### Changed
 
-- `distlift deps autoupdate --help` now explains which dependency manifests it
-  updates, that it mirrors the automatic release-time dependency updates for
-  configured targets, when to run it manually, and which release and upgrade
-  operations it does not perform.
+- `distlift deps autoupdate --help` now explains which dependency manifests it updates, that it mirrors the automatic release-time dependency updates for configured targets, when to run it manually, and which release and upgrade operations it does not perform.
+- Remove local references
+- Add ability to update project dependencies
 
 ### Fixed
 
-- Interactive `deps upgrade` selector now renders one dependency per line,
-  shows column titles, expands column spacing to use available terminal
-  width, and adapts layout on resize.
-- Interactive `deps upgrade` selector shows an **Installed** column (active
-  environment version) after **Package**, then **Target**, **Group**,
-  **Constraint**, and **Lock**.
-- `deps upgrade` hides dependencies that are already on their latest
-  available version and skips sources with nothing to upgrade.
-- `deps upgrade` installs upgraded packages into the active environment by
-  default (`pip install` for Python, full `npm`/`pnpm`/`yarn install` for
-  JavaScript). Use `--no-install` or
-  `dependency_upgrades.install_packages = false` for manifest/lock-only
-  updates.
+- Interactive `deps upgrade` selector now renders one dependency per line, shows column titles, expands column spacing to use available terminal width, and adapts layout on resize.
+- Interactive `deps upgrade` selector shows an **Installed** column (active environment version) after **Package**, then **Target**, **Group**, **Constraint**, and **Lock**.
+- `deps upgrade` hides dependencies that are already on their latest available version and skips sources with nothing to upgrade.
+- `deps upgrade` installs upgraded packages into the active environment by default (`pip install` for Python, full `npm`/`pnpm`/`yarn install` for JavaScript). Use `--no-install` or `dependency_upgrades.install_packages = false` for manifest/lock-only updates.
 
 ## [1.0.0] - 2026-07-13
 
@@ -141,4 +128,5 @@
 [0.1.8]: https://github.com/pyl1b/distlift/compare/v0.1.7...v0.1.8
 [0.1.9]: https://github.com/pyl1b/distlift/compare/v0.1.8...v0.1.9
 [1.0.0]: https://github.com/pyl1b/distlift/compare/v0.1.9...v1.0.0
-[unreleased]: https://github.com/pyl1b/distlift/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/pyl1b/distlift/compare/v1.0.0...v1.1.0
+[unreleased]: https://github.com/pyl1b/distlift/compare/v1.1.0...HEAD
