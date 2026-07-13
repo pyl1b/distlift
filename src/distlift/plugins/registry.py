@@ -9,6 +9,7 @@ from distlift.plugins.base import (
     GitBackendPlugin,
     LanguagePlugin,
     ManifestPlugin,
+    PackageManagerPlugin,
     PublishPlugin,
     VersionSourcePlugin,
 )
@@ -48,6 +49,7 @@ class PluginRegistry:
         _git_backend: Optional registered Git backend plugin.
         _changelog_plugin: Optional registered changelog formatter plugin.
         _dependency_update_plugins: Map of updater name to registered plugin.
+        _package_manager_plugins: Map of manager name to registered plugin.
     """
 
     allow_override: bool = True
@@ -67,6 +69,9 @@ class PluginRegistry:
     _git_backend: RegisteredPlugin | None = None
     _changelog_plugin: RegisteredPlugin | None = None
     _dependency_update_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
+        _empty_registered_map
+    )
+    _package_manager_plugins: dict[str, RegisteredPlugin] = attrs.Factory(
         _empty_registered_map
     )
 
@@ -236,6 +241,30 @@ class PluginRegistry:
             ),
         )
 
+    def register_package_manager_plugin(
+        self, plugin: PackageManagerPlugin, source: str = "<unknown>"
+    ) -> None:
+        """Register or replace the plugin for ``plugin.get_manager_name()``.
+
+        Args:
+            plugin: Package manager plugin instance to register.
+            source: Provenance label for diagnostics.
+        """
+        name = plugin.get_manager_name()
+
+        if name in self._package_manager_plugins and not self.allow_override:
+            raise PluginError(
+                f"Package manager plugin {name!r} already registered; "
+                "overrides are disabled"
+            )
+
+        prev = self._package_manager_plugins.get(name)
+        self._package_manager_plugins[name] = RegisteredPlugin(
+            plugin=plugin,
+            source=source,
+            overrides=prev.source if prev else None,
+        )
+
     def get_language_plugin(self, language: str) -> LanguagePlugin:
         """Return the registered language plugin for ``language``.
 
@@ -298,6 +327,37 @@ class PluginRegistry:
             for entry in self._dependency_update_plugins.values()
         ]
 
+    def get_package_manager_plugins(self) -> list[PackageManagerPlugin]:
+        """Return all registered package manager plugins.
+
+        Returns:
+            List of package manager plugin instances.
+        """
+        return [
+            entry.plugin  # type: ignore[misc]
+            for entry in self._package_manager_plugins.values()
+        ]
+
+    def get_package_manager_plugin(
+        self, manager_name: str
+    ) -> PackageManagerPlugin:
+        """Return the registered package manager plugin by id.
+
+        Args:
+            manager_name: Package manager id such as ``pip`` or ``npm``.
+
+        Raises:
+            PluginError: When no plugin is registered for ``manager_name``.
+        """
+        entry = self._package_manager_plugins.get(manager_name)
+
+        if entry is None:
+            raise PluginError(
+                f"No package manager plugin registered for {manager_name!r}"
+            )
+
+        return entry.plugin  # type: ignore[return-value]
+
     def get_changelog_plugin(self) -> ChangelogPlugin | None:
         """Return the registered changelog plugin when present.
 
@@ -317,6 +377,7 @@ class PluginRegistry:
         result.extend(self._publish_plugins.values())
         result.extend(self._version_source_plugins.values())
         result.extend(self._dependency_update_plugins.values())
+        result.extend(self._package_manager_plugins.values())
         if self._git_backend:
             result.append(self._git_backend)
         if self._changelog_plugin:

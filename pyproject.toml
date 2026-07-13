@@ -25,19 +25,20 @@ classifiers = [
 ]
 dependencies = [
     "attrs>=23.2",
-    "click>=8.4",
-    "packaging>=24",
+    "click>=8.4.2",
+    "packaging>=26.2",
     "typer>=0.16",
     "tomlkit>=0.13",
+    "prompt_toolkit>=3.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-cov>=5.0",
-    "ruff>=0.4",
-    "mypy>=1.10",
-    "pre-commit>=3.7",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.21",
+    "mypy>=2.3.0",
+    "pre-commit>=4.6.0",
 ]
 
 [project.scripts]

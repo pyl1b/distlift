@@ -14,6 +14,7 @@ from distlift.config.models import (
     BuildTargetConfig,
     DependencyUpdateRule,
     DependencyUpdatesConfig,
+    DependencyUpgradesConfig,
     ExternalMonorepoDependencyUpdateConfig,
     HooksConfig,
     HookSpec,
@@ -206,6 +207,57 @@ def dependency_updates_from_mapping(
         external_monorepos=external,
         **kw,
     )
+
+
+def dependency_upgrades_from_mapping(
+    mapping: Any,
+) -> DependencyUpgradesConfig:
+    """Build ``DependencyUpgradesConfig`` from a ``[dependency_upgrades]`` table.
+
+    Args:
+        mapping: Parsed mapping for the dependency_upgrades section.
+    """
+    if not isinstance(mapping, dict):
+        return DependencyUpgradesConfig()
+
+    kw: dict[str, Any] = {}
+
+    if "enabled" in mapping:
+        kw["enabled"] = bool(mapping["enabled"])
+
+    if "registry_timeout_seconds" in mapping:
+        kw["registry_timeout_seconds"] = int(
+            mapping["registry_timeout_seconds"]
+        )
+
+    if "lock_refresh_timeout_seconds" in mapping:
+        kw["lock_refresh_timeout_seconds"] = int(
+            mapping["lock_refresh_timeout_seconds"]
+        )
+
+    if "registry_max_workers" in mapping:
+        kw["registry_max_workers"] = int(mapping["registry_max_workers"])
+
+    if "respect_receive_enabled" in mapping:
+        kw["respect_receive_enabled"] = bool(
+            mapping["respect_receive_enabled"]
+        )
+
+    if "install_packages" in mapping:
+        kw["install_packages"] = bool(mapping["install_packages"])
+
+    if "install_timeout_seconds" in mapping:
+        kw["install_timeout_seconds"] = int(mapping["install_timeout_seconds"])
+
+    package_managers: dict[str, str] = {}
+    pm_raw = mapping.get("package_managers")
+
+    if isinstance(pm_raw, dict):
+        for key, value in pm_raw.items():
+            if str(key).strip() and str(value).strip():
+                package_managers[str(key).strip()] = str(value).strip()
+
+    return DependencyUpgradesConfig(package_managers=package_managers, **kw)
 
 
 def _changelog_overlay_from_mapping(mapping: Any) -> dict[str, Any]:
@@ -480,6 +532,17 @@ def load_environment_config(
 
     if dep_env:
         result["dependency_updates"] = dep_env
+
+    upgrades_env: dict[str, Any] = {}
+
+    if v := _get("DEPENDENCY_UPGRADES_ENABLED"):
+        upgrades_env["enabled"] = v.lower() in ("1", "true", "yes")
+
+    if v := _get("DEPENDENCY_UPGRADES_INSTALL_PACKAGES"):
+        upgrades_env["install_packages"] = v.lower() in ("1", "true", "yes")
+
+    if upgrades_env:
+        result["dependency_upgrades"] = upgrades_env
 
     hooks_append_kw: dict[str, list[HookSpec]] = {}
 
@@ -835,6 +898,10 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         data.get("dependency_updates")
     )
 
+    dependency_upgrades = dependency_upgrades_from_mapping(
+        data.get("dependency_upgrades")
+    )
+
     hooks = hooks_config_from_mapping(data.get("hooks", {}))
 
     hooks_append_raw = data.get("hooks_append")
@@ -864,6 +931,7 @@ def _parse_raw_config(data: dict[str, Any], source: str) -> RawConfig:
         changelog_overlay=changelog_overlay,
         deploy_overlay=deploy_overlay,
         dependency_updates=dependency_updates,
+        dependency_upgrades=dependency_upgrades,
         hooks=hooks,
         hooks_append=hooks_append,
         build=build_config,

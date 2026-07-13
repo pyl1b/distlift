@@ -56,6 +56,28 @@ def _setup_two_package_repo(tmp_path):
 class TestCliDependencyAutoupdate:
     """CLI tests for the deps autoupdate command."""
 
+    def test_autoupdate_help_explains_scope_and_side_effects(self) -> None:
+        """Describe what autoupdate changes and what it deliberately omits."""
+        runner = CliRunner()
+
+        result = runner.invoke(app, ["deps", "autoupdate", "--help"])
+        help_text = " ".join(result.output.split())
+
+        assert result.exit_code == 0, result.output
+        assert "During a distlift release" in help_text
+        assert "same dependency-update logic runs automatically" in help_text
+        assert "manual shortcut" in help_text
+        assert "version was bumped without distlift" in help_text
+        assert "release did not update dependents" in help_text
+        assert "PACKAGE=VERSION" in help_text
+        assert "dependency_updates configuration section" in help_text
+        assert "current monorepo" in help_text
+        assert "configured external monorepos" in help_text
+        assert "does not discover new package versions" in help_text
+        assert "create tags, or push to Git" in help_text
+        assert "distlift deps upgrade" in help_text
+        assert "dependencies_autoupdated hooks" in help_text
+
     def test_autoupdate_dry_run(self, tmp_path) -> None:
         """Preview dependency updates without writing files."""
         _setup_two_package_repo(tmp_path)

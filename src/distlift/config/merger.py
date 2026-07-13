@@ -10,6 +10,7 @@ from distlift.config.models import (
     BuildConfig,
     ChangelogConfig,
     DependencyUpdatesConfig,
+    DependencyUpgradesConfig,
     DeployConfig,
     HooksConfig,
     ManagedPackageConfig,
@@ -192,6 +193,50 @@ def merge_dependency_updates_layers(
         javascript_version_template=javascript_template,
         rules=rules,
         external_monorepos=external,
+    )
+
+
+def merge_dependency_upgrades_layers(
+    layers: Sequence[RawConfig],
+) -> DependencyUpgradesConfig:
+    """Merge interactive dependency upgrade settings from all layers.
+
+    Args:
+        layers: Raw configuration fragments ordered low to high precedence.
+    """
+    base = DependencyUpgradesConfig()
+    enabled = base.enabled
+    registry_timeout = base.registry_timeout_seconds
+    lock_timeout = base.lock_refresh_timeout_seconds
+    max_workers = base.registry_max_workers
+    respect_receive = base.respect_receive_enabled
+    install_packages = base.install_packages
+    install_timeout = base.install_timeout_seconds
+    package_managers = dict(base.package_managers)
+
+    for layer in layers:
+        du = layer.dependency_upgrades
+
+        enabled = du.enabled
+        registry_timeout = du.registry_timeout_seconds
+        lock_timeout = du.lock_refresh_timeout_seconds
+        max_workers = du.registry_max_workers
+        respect_receive = du.respect_receive_enabled
+        install_packages = du.install_packages
+        install_timeout = du.install_timeout_seconds
+
+        if du.package_managers:
+            package_managers = dict(du.package_managers)
+
+    return DependencyUpgradesConfig(
+        enabled=enabled,
+        registry_timeout_seconds=registry_timeout,
+        lock_refresh_timeout_seconds=lock_timeout,
+        registry_max_workers=max_workers,
+        respect_receive_enabled=respect_receive,
+        package_managers=package_managers,
+        install_packages=install_packages,
+        install_timeout_seconds=install_timeout,
     )
 
 
@@ -408,6 +453,8 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
 
     dependency_updates_config = merge_dependency_updates_layers(layers)
 
+    dependency_upgrades_config = merge_dependency_upgrades_layers(layers)
+
     # version_files: replacement-style — last non-empty layer wins
     version_files: list[VersionFileConfig] = []
     for layer in layers:
@@ -447,6 +494,7 @@ def merge_config_layers(layers: Sequence[RawConfig]) -> ResolvedConfig:
         changelog=changelog_config,
         deploy=deploy_config,
         dependency_updates=dependency_updates_config,
+        dependency_upgrades=dependency_upgrades_config,
         hooks=hooks_config,
         build=build_config,
         publish=publish_config,

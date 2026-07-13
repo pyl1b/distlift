@@ -10,6 +10,10 @@ def build_builtin_plugins() -> list[DistliftPlugin]:
     from distlift.changelog.plugin import KeepAChangelogBuiltinPlugin
     from distlift.languages.javascript import JavaScriptProjectPlugin
     from distlift.languages.python import PythonProjectPlugin
+    from distlift.package_managers.npm import NpmPackageManagerPlugin
+    from distlift.package_managers.pip import PipPackageManagerPlugin
+    from distlift.package_managers.pnpm import PnpmPackageManagerPlugin
+    from distlift.package_managers.yarn import YarnPackageManagerPlugin
     from distlift.vcs.git import GitBackendBuiltinPlugin
 
     return [
@@ -17,4 +21,8 @@ def build_builtin_plugins() -> list[DistliftPlugin]:
         KeepAChangelogBuiltinPlugin(),
         PythonProjectPlugin(),
         JavaScriptProjectPlugin(),
+        PipPackageManagerPlugin(),
+        NpmPackageManagerPlugin(),
+        PnpmPackageManagerPlugin(),
+        YarnPackageManagerPlugin(),
     ]

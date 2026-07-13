@@ -189,7 +189,7 @@ dependency_updates_receive_enabled = true
 **Outside a release**, apply the same logic manually:
 
 ```text
-distlift dependencies autoupdate --released a=1.2.0
+distlift deps autoupdate --released a=1.2.0
 ```
 
 Use `--dry-run` to preview changes. When updates run, the
@@ -203,6 +203,25 @@ subprocesses also receive:
   (sorted)
 - `DISTLIFT_DEPENDENCY_UPDATE_TRIGGERS` — released packages that triggered
   updates (sorted)
+
+**Interactive third-party upgrades** (requires a real terminal):
+
+```text
+distlift deps upgrade
+```
+
+For each project source (for example `frontend` and `backend` in a
+monorepo), distlift shows a scrollable dependency list. Use **Up/Down**
+to move, **Space** to cycle available versions (latest stable by default,
+then newer releases, then skip), **Left/Right** to toggle stable vs skip,
+**Enter** to approve a source, and **Esc** to cancel. After all sources,
+confirm once; distlift updates manifest declarations, installs packages
+into the active environment (Python venv or ``node_modules``), and
+refreshes supported lock files when ``--no-install`` is used
+(`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`).
+Use `--dry-run` to rehearse without writing files. Use `--no-install`
+to update manifests and lock files only. Non-interactive environments
+should continue to use `distlift deps autoupdate`.
 
 **Custom rules in a plugin:** scaffold a small pip-installable project:
 

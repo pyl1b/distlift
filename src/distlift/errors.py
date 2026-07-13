@@ -95,3 +95,27 @@ class HookExecutionError(DistliftError):
     Attributes:
         None beyond the attributes inherited from ``Exception``.
     """
+
+
+class DependencyUpgradeError(DistliftError):
+    """Interactive dependency upgrade failed.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """
+
+
+class PackageManagerDetectionError(DependencyUpgradeError):
+    """Package manager selection for a project source failed.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """
+
+
+class RegistryQueryError(DependencyUpgradeError):
+    """Registry version lookup failed.
+
+    Attributes:
+        None beyond the attributes inherited from ``Exception``.
+    """

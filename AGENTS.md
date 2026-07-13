@@ -55,6 +55,24 @@ src/distlift/
     service.py         run_builtin_dependency_updates(), rule and scan orchestration
     configured_plugin.py ConfiguredDependencyUpdaterPlugin (TOML rules)
     format.py          CLI autoupdate summary lines
+    inventory.py       list-all manifest dependency inventory
+    registry_query.py  pip/npm/pnpm/yarn registry version queries
+    registry_resolver.py cached concurrent version resolution
+    upgrade_models.py  interactive upgrade plan/result models
+    upgrade_service.py interactive upgrade orchestration
+    version_cycle.py   Space-cycle and stable/skip selection helpers
+
+  package_managers/
+    base.py            subprocess helpers and built-in plugin base class
+    detection.py       per-project package manager detection
+    pip.py             PEP 621 + pip index versions
+    npm.py             package.json + package-lock.json
+    pnpm.py            pnpm-lock.yaml refresh
+    yarn.py            yarn.lock refresh
+
+  terminal/
+    dependency_selector.py prompt_toolkit keyboard UI for deps upgrade
+    selector_backend.py  SelectorBackend protocol and test backend
 
   changelog/
     builder.py         assemble changelog update plans from Git history and settings
@@ -179,6 +197,13 @@ without prompting. Disable per run with `--no-changelog-editor` /
 Key dependency-update environment variables:
 `DISTLIFT_DEPENDENCY_UPDATES_ENABLED`,
 `DISTLIFT_DEPENDENCY_UPDATES_INCLUDE_CURRENT_MONOREPO`.
+Interactive third-party upgrades use `[dependency_upgrades]` and
+`DISTLIFT_DEPENDENCY_UPGRADES_ENABLED` (independent from release
+propagation). `dependency_upgrades.install_packages` (default true) and
+`DISTLIFT_DEPENDENCY_UPGRADES_INSTALL_PACKAGES` control whether
+`deps upgrade` runs environment installs after manifest edits. Command:
+`distlift deps upgrade` (TTY required; `--no-install` for manifest/lock
+only).
 Hook event `dependencies_autoupdated` exposes `DISTLIFT_DEPENDENCY_UPDATE_*`
 summary variables after dependency files are written.
 
@@ -196,6 +221,10 @@ Plugin load order (later overrides earlier when `allow_override` is true):
 A filesystem plugin module must export either a callable `get_plugin()` that
 returns a `DistliftPlugin` instance, or a class named `Plugin` (or
 `<ModuleName>Plugin`) that subclasses `DistliftPlugin`.
+
+`PackageManagerPlugin` provides interactive third-party dependency upgrades
+(`pip`, `npm`, `pnpm`, `yarn` built-ins). `DependencyUpdaterPlugin` remains
+for release-triggered internal propagation only.
 
 `PluginRegistry` stores one active implementation per capability key (language
 name, manifest kind, etc.). Registering a duplicate key raises `PluginError`

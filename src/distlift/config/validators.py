@@ -25,6 +25,7 @@ def validate_resolved_config(config: ResolvedConfig) -> None:
     validate_changelog_config(config)
     validate_deploy_config(config)
     validate_dependency_updates_config(config)
+    validate_dependency_upgrades_config(config)
     validate_hooks_config(config)
 
     if config.mode == ReleaseMode.MONOREPO:
@@ -168,6 +169,35 @@ def validate_dependency_updates_config(config: ResolvedConfig) -> None:
                 f"dependency_updates.external_monorepos[{i}].path cannot be "
                 "empty"
             )
+
+
+def validate_dependency_upgrades_config(config: ResolvedConfig) -> None:
+    """Validate interactive dependency upgrade settings.
+
+    Args:
+        config: Fully merged configuration including ``dependency_upgrades``.
+    """
+    du = config.dependency_upgrades
+
+    if du.registry_timeout_seconds <= 0:
+        raise ConfigurationError(
+            "dependency_upgrades.registry_timeout_seconds must be positive"
+        )
+
+    if du.lock_refresh_timeout_seconds <= 0:
+        raise ConfigurationError(
+            "dependency_upgrades.lock_refresh_timeout_seconds must be positive"
+        )
+
+    if du.registry_max_workers <= 0:
+        raise ConfigurationError(
+            "dependency_upgrades.registry_max_workers must be positive"
+        )
+
+    if du.install_timeout_seconds <= 0:
+        raise ConfigurationError(
+            "dependency_upgrades.install_timeout_seconds must be positive"
+        )
 
 
 def validate_deploy_config(config: ResolvedConfig) -> None:

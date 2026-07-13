@@ -17,6 +17,8 @@ _JS_DEP_GROUPS = (
     "optionalDependencies",
 )
 
+JS_DEP_GROUPS = _JS_DEP_GROUPS
+
 _WORKSPACE_PREFIXES = ("workspace:*", "workspace:^")
 
 

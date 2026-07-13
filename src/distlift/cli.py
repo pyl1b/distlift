@@ -237,6 +237,20 @@ def _stdin_is_interactive() -> bool:
     return sys.stdin.isatty()
 
 
+def _terminal_is_interactive() -> bool:
+    """Return True when stdin and stdout are both interactive terminals.
+
+    Args:
+        None
+
+    Returns:
+        Whether interactive dependency selection may run safely.
+    """
+    from distlift.terminal.dependency_selector import terminal_is_interactive
+
+    return terminal_is_interactive()
+
+
 def _version_option_callback(value: bool) -> None:
     """Print the distlift program version and exit when requested.
 
@@ -1409,7 +1423,34 @@ def deploy_command(
             )
 
 
-@dependencies_app.command("autoupdate")
+@dependencies_app.command(
+    "autoupdate",
+    help=(
+        "Update dependency declarations after one or more packages have been "
+        "released.\n\n"
+        "During a distlift release, the same dependency-update logic runs "
+        "automatically for configured targets when dependency_updates is "
+        "enabled. Use this command as a manual shortcut when a package "
+        "version was bumped without distlift, or when a release did not "
+        "update dependents for some reason.\n\n"
+        "For each PACKAGE=VERSION passed with --released, this command applies "
+        "the rules in the dependency_updates configuration section to "
+        "dependent Python and JavaScript project manifests. It can scan the "
+        "current monorepo, configured external monorepos, and invoke "
+        "dependency-updater plugins. Version constraints are rewritten using "
+        "the configured templates.\n\n"
+        "This command does not discover new package versions, perform an "
+        "interactive third-party upgrade, bump project versions, refresh lock "
+        "files, create a release commit, create tags, or push to Git. Use "
+        "'distlift deps upgrade' to interactively upgrade third-party "
+        "dependencies.\n\n"
+        "Dependency updates must be enabled in configuration. Repeat "
+        "--released for multiple packages, for example: "
+        "--released api=2.1.0 --released client=4.0.0. Use --dry-run to show "
+        "the manifest changes without writing files. After real changes are "
+        "written, configured dependencies_autoupdated hooks are run."
+    ),
+)
 def dependencies_autoupdate_command(
     released: Annotated[
         list[str],
@@ -1457,6 +1498,161 @@ def dependencies_autoupdate_command(
 
     prefix = "[dry-run] " if dry_run else ""
     _echo_dependency_updates(results, dry_run=dry_run, prefix=prefix)
+
+
+@dependencies_app.command("upgrade")
+def dependencies_upgrade_command(
+    config_path: Annotated[
+        Path | None, typer.Option("--config", help="Extra config file")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Preview without writing files")
+    ] = False,
+    no_install: Annotated[
+        bool,
+        typer.Option(
+            "--no-install",
+            help="Update manifests and lock files only; skip environment install",
+        ),
+    ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-V")] = False,
+    repo_root: Annotated[Path, typer.Option("--repo-root")] = Path("."),
+    project: Annotated[
+        list[str],
+        typer.Option(
+            "--project",
+            help="Only upgrade dependencies for this project (repeatable).",
+        ),
+    ] = [],
+    package_manager: Annotated[
+        list[str],
+        typer.Option(
+            "--package-manager",
+            help="Override package manager as project=manager (repeatable).",
+        ),
+    ] = [],
+) -> None:
+    """Interactively upgrade third-party dependencies per project source.
+
+    By default, approved upgrades update manifest files and install packages
+    into the active environment (venv or ``node_modules``). Use
+    ``--no-install`` to change manifests and lock files only.
+
+    Args:
+        config_path: Optional extra TOML config path merged before the run.
+        dry_run: When True, run the selector and preview without writes.
+        no_install: When True, skip environment install on execute.
+        verbose: When True, enable verbose logging.
+        repo_root: Repository root directory path.
+        project: Optional project name filters for monorepo packages.
+        package_manager: Optional per-project package manager overrides.
+    """
+    if not _terminal_is_interactive():
+        typer.echo(
+            "Error: deps upgrade requires an interactive terminal (TTY).\n"
+            "Use distlift deps autoupdate for non-interactive updates.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    configure_logging(verbose)
+    application = DistliftApplication()
+    extra = [config_path] if config_path else None
+    root = repo_root.resolve()
+    config = application.load_effective_config(root, extra)
+
+    if no_install:
+        config = attrs.evolve(
+            config,
+            dependency_upgrades=attrs.evolve(
+                config.dependency_upgrades,
+                install_packages=False,
+            ),
+        )
+
+    manager_overrides = _parse_package_manager_overrides(package_manager)
+
+    def _confirm_plan(plan) -> bool:
+        from distlift.dependencies.upgrade_service import format_plan_summary
+
+        typer.echo(format_plan_summary(plan))
+
+        if dry_run:
+            return True
+
+        return typer.confirm("Proceed?", default=False)
+
+    try:
+        validate_resolved_config(config)
+        result = application.run_dependency_upgrade(
+            root,
+            config,
+            dry_run=dry_run,
+            project_filter=project or None,
+            manager_overrides=manager_overrides or None,
+            confirm_callback=_confirm_plan,
+        )
+    except Exception as exc:
+        from distlift.terminal.selector_backend import SelectorCancelledError
+
+        if isinstance(exc, SelectorCancelledError):
+            typer.echo("Cancelled.", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(f"Dependency upgrade failed: {exc}", err=True)
+        raise typer.Exit(1)
+
+    prefix = "[dry-run] " if dry_run else ""
+
+    for source_result in result.source_results:
+        for change in source_result.manifest_changes:
+            verb = "would update" if dry_run else "updated"
+            typer.echo(
+                f"{prefix}{verb} {change.project_name}: "
+                f"{change.dependency_name} {change.old_specifier} -> "
+                f"{change.new_specifier}"
+            )
+
+        for lock_path in source_result.lock_files_updated:
+            verb = "would refresh" if dry_run else "refreshed"
+            typer.echo(f"{prefix}{verb} lock file {lock_path}")
+
+        for install_label in source_result.packages_installed:
+            verb = "would install" if dry_run else "installed"
+            typer.echo(f"{prefix}{verb} in environment: {install_label}")
+
+        for warning in source_result.warnings:
+            typer.echo(f"{prefix}{warning}", err=True)
+
+    if not result.success:
+        typer.echo(result.error or "Dependency upgrade failed", err=True)
+        raise typer.Exit(1)
+
+
+def _parse_package_manager_overrides(
+    values: list[str],
+) -> dict[str, str]:
+    """Parse ``project=manager`` override strings from CLI flags.
+
+    Args:
+        values: Raw ``--package-manager`` option values.
+    """
+    overrides: dict[str, str] = {}
+
+    for raw in values:
+        if "=" not in raw:
+            raise typer.BadParameter(f"Expected project=manager, got {raw!r}")
+
+        project_name, manager_name = raw.split("=", 1)
+        project_name = project_name.strip()
+        manager_name = manager_name.strip()
+
+        if not project_name or not manager_name:
+            raise typer.BadParameter(f"Expected project=manager, got {raw!r}")
+
+        overrides[project_name] = manager_name
+
+    return overrides
 
 
 @plugins_app.command("create-dependency-updater")

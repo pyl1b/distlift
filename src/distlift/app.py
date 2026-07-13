@@ -802,6 +802,96 @@ class DistliftApplication:
 
         return results
 
+    def run_dependency_upgrade(
+        self,
+        repo_root: Path,
+        config: ResolvedConfig,
+        *,
+        dry_run: bool = False,
+        project_filter: list[str] | None = None,
+        manager_overrides: dict[str, str] | None = None,
+        selector_backend=None,
+        confirm_callback=None,
+        registry: PluginRegistry | None = None,
+    ):
+        """Run the interactive third-party dependency upgrade workflow.
+
+        Args:
+            repo_root: Repository root for config and project discovery.
+            config: Effective merged configuration.
+            dry_run: When True, preview changes without writing files.
+            project_filter: Optional project name allow-list.
+            manager_overrides: Optional per-project manager overrides.
+            selector_backend: Optional injected selector backend for tests.
+            confirm_callback: Optional final confirmation callback.
+            registry: Optional plugin registry; built from config when omitted.
+
+        Returns:
+            Dependency upgrade result with per-source details.
+        """
+        from distlift.dependencies.upgrade_service import (
+            run_interactive_upgrade_session,
+        )
+        from distlift.terminal.dependency_selector import (
+            PromptToolkitSelectorBackend,
+        )
+
+        if registry is None:
+            registry = self._default_registry(config)
+
+        selector = selector_backend or PromptToolkitSelectorBackend()
+
+        result = run_interactive_upgrade_session(
+            repo_root.resolve(),
+            config,
+            registry,
+            dry_run=dry_run,
+            selector=selector,
+            project_filter=project_filter,
+            manager_overrides=manager_overrides,
+            confirm_callback=confirm_callback,
+        )
+
+        if dry_run or not result.success:
+            return result
+
+        all_changes = [
+            change
+            for source_result in result.source_results
+            for change in source_result.manifest_changes
+        ]
+
+        if not all_changes:
+            return result
+
+        specs = specs_for_event(config.hooks, "dependencies_autoupdated")
+
+        if specs:
+            projects = sorted({change.project_name for change in all_changes})
+            files = sorted(
+                {str(change.manifest_path) for change in all_changes}
+            )
+            dependencies = sorted(
+                {change.dependency_name for change in all_changes}
+            )
+            extra = build_hook_env(
+                event="dependencies_autoupdated",
+                repo_root=repo_root.resolve(),
+                dry_run=False,
+                dependency_update_count=len(all_changes),
+                dependency_update_projects=projects,
+                dependency_update_files=files,
+                dependency_update_dependencies=dependencies,
+                dependency_update_triggers=["interactive"],
+            )
+            run_hook_specs(
+                specs,
+                repo_root=repo_root.resolve(),
+                extra_env=extra,
+            )
+
+        return result
+
     def run_deploy(self, request: DeployRequest) -> DeployResult:
         """Create and push a numbered deploy marker tag at ``HEAD``.
 

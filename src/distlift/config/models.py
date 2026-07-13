@@ -206,6 +206,32 @@ class DependencyUpdatesConfig:
 
 
 @attrs.define
+class DependencyUpgradesConfig:
+    """Settings for interactive third-party dependency upgrades.
+
+    Attributes:
+        enabled: Whether ``distlift deps upgrade`` is allowed to run.
+        registry_timeout_seconds: Registry subprocess timeout.
+        lock_refresh_timeout_seconds: Lock refresh subprocess timeout.
+        registry_max_workers: Concurrent registry fetch worker count.
+        respect_receive_enabled: Honor monorepo receive flags when discovering
+            sources.
+        package_managers: Optional per-project package manager overrides.
+        install_packages: Whether execution installs into the environment.
+        install_timeout_seconds: Subprocess timeout for environment installs.
+    """
+
+    enabled: bool = True
+    registry_timeout_seconds: int = 120
+    lock_refresh_timeout_seconds: int = 300
+    registry_max_workers: int = 4
+    respect_receive_enabled: bool = False
+    package_managers: dict[str, str] = attrs.Factory(dict)
+    install_packages: bool = True
+    install_timeout_seconds: int = 600
+
+
+@attrs.define
 class VersionFileConfig:
     """One manifest file that participates in a release unit's version handling.
 
@@ -435,6 +461,7 @@ class RawConfig:
         deploy_overlay: Shallow overlay dict for ``[deploy]`` keys from this
             layer; merged field-by-field across layers.
         dependency_updates: Dependency autoupdate settings from this layer.
+        dependency_upgrades: Interactive dependency upgrade settings.
         hooks: Hook commands from this layer's ``[hooks]`` table.
         hooks_append: Extra hook specs parsed from ``DISTLIFT_HOOKS_*``; only
             the environment layer supplies these; appended after TOML merge.
@@ -457,6 +484,9 @@ class RawConfig:
     deploy_overlay: dict[str, Any] = attrs.Factory(dict)
     dependency_updates: DependencyUpdatesConfig = attrs.Factory(
         DependencyUpdatesConfig
+    )
+    dependency_upgrades: DependencyUpgradesConfig = attrs.Factory(
+        DependencyUpgradesConfig
     )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     hooks_append: HooksConfig = attrs.Factory(_empty_hooks_config)
@@ -487,6 +517,7 @@ class ResolvedConfig:
         changelog: Effective Keep a Changelog generation settings.
         deploy: Effective ``distlift deploy`` settings.
         dependency_updates: Effective dependency autoupdate settings.
+        dependency_upgrades: Effective interactive dependency upgrade settings.
         hooks: Effective lifecycle hook command lists.
         field_sources: Map of top-level scalar field names to the source
             label of the layer that last set each field.
@@ -508,6 +539,9 @@ class ResolvedConfig:
     deploy: DeployConfig = attrs.Factory(DeployConfig)
     dependency_updates: DependencyUpdatesConfig = attrs.Factory(
         DependencyUpdatesConfig
+    )
+    dependency_upgrades: DependencyUpgradesConfig = attrs.Factory(
+        DependencyUpgradesConfig
     )
     hooks: HooksConfig = attrs.Factory(_empty_hooks_config)
     build: BuildConfig = attrs.Factory(BuildConfig)
