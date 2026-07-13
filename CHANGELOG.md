@@ -1,34 +1,22 @@
 # Changelog
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
 
-### Fixed
-
-- Require Typer 0.16+ so ``--help`` works with Click 8.2 and newer (fixes
-  ``Parameter.make_metavar()`` errors when another package upgrades Click).
-- Changelog render no longer adds extra blank lines after the title when the
-  only preamble content is the separator before the first release heading.
+## [0.1.9] - 2026-07-13
 
 ### Added
 
-- Manifest kind ``python-version`` for Python files containing
-  ``__version__ = "..."`` assignments.
+- Manifest kind ``python-version`` for Python files containing ``__version__ = "..."`` assignments.
+
+### Changed
+
+- Python version handler
+- Lift myself
+
+### Fixed
+
+- Require Typer 0.16+ so ``--help`` works with Click 8.2 and newer (fixes ``Parameter.make_metavar()`` errors when another package upgrades Click).
+- Changelog render no longer adds extra blank lines after the title when the only preamble content is the separator before the first release heading.
 
 ## [0.1.8] - 2026-06-01
 
@@ -112,4 +100,5 @@
 [0.1.6]: https://github.com/pyl1b/distlift/compare/v0.1.5...v0.1.6
 [0.1.7]: https://github.com/pyl1b/distlift/compare/v0.1.6...v0.1.7
 [0.1.8]: https://github.com/pyl1b/distlift/compare/v0.1.7...v0.1.8
-[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.8...HEAD
+[0.1.9]: https://github.com/pyl1b/distlift/compare/v0.1.8...v0.1.9
+[unreleased]: https://github.com/pyl1b/distlift/compare/v0.1.9...HEAD
